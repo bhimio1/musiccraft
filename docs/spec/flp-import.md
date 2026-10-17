@@ -25,10 +25,13 @@ Times in ticks are rescaled from the file's PPQ to MusicCraft's 96 (rounded).
   10000 becomes 0.78), pan 0–12800 to −1…1, and a disabled channel is muted.
   The mixer insert carries over (the "current" insert, −1, becomes master), as
   does the display group name.
-  - Sampler with a sample: a sampler playing that path as written. FL's factory
-    paths (`%FLStudioFactoryData%…`) and files that are not on this computer
-    stay in the project and play silence until relocated.
-  - Sampler without a sample: an empty sampler (silent).
+  - Sampler with a sample: a sampler playing that path. On Linux and macOS
+    Windows paths and FL's placeholders (`%FLStudioFactoryData%…`) are
+    translated at import (`sample-paths.md`): a file found on this computer
+    replaces the path, and the report says how many were found and lists the
+    ones that were not. Those stay as written and play silence until found
+    (Settings → Folders, then `project.localize_samples`).
+  - Sampler without a sample: an empty sampler (silent, with no warning).
   - VST3 plugin: a plugin instrument with the VST3 class id MusicCraft uses
     (`vst3:<32 hex>`). The id's byte order follows the platform that saved the
     file: a Windows path to the plugin means COM order. It is converted to the

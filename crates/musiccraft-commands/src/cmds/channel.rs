@@ -224,15 +224,19 @@ pub(super) fn check_sample(
         return Ok(label);
     }
     let path = Path::new(sample);
+    let base = project.path().and_then(Path::parent);
+    // A path from another system counts when it translates to a file here.
     let exists = path.exists()
-        || project
-            .path()
-            .and_then(Path::parent)
-            .is_some_and(|dir| dir.join(path).exists());
+        || base.is_some_and(|dir| dir.join(path).exists())
+        || musiccraft_paths::Resolver::new()
+            .resolve(sample, base)
+            .is_some();
     if !exists {
         return Err(args.invalid(format!("sample file `{sample}` does not exist")));
     }
-    Ok(path
+    // The label is the file name, whichever system's separators it uses.
+    let name = sample.rsplit(['/', '\\']).next().unwrap_or(sample);
+    Ok(Path::new(name)
         .file_stem()
         .map_or_else(|| sample.to_owned(), |s| s.to_string_lossy().into_owned()))
 }

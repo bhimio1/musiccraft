@@ -1406,6 +1406,7 @@ dependencies = [
  "musiccraft-commands",
  "musiccraft-dsp",
  "musiccraft-engine",
+ "musiccraft-paths",
  "musiccraft-project",
  "musiccraft-render",
  "musiccraft-samples",
@@ -1465,6 +1466,7 @@ version = "0.2.2"
 dependencies = [
  "musiccraft-flp",
  "musiccraft-formula",
+ "musiccraft-paths",
  "musiccraft-project",
  "serde",
  "serde_json",
@@ -1527,6 +1529,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "musiccraft-paths"
+version = "0.2.2"
+
+[[package]]
 name = "musiccraft-plugin-window"
 version = "0.2.2"
 dependencies = [
@@ -1552,6 +1558,7 @@ dependencies = [
  "musiccraft-engine",
  "musiccraft-formula",
  "musiccraft-params",
+ "musiccraft-paths",
  "musiccraft-project",
  "musiccraft-samples",
  "serde_json",
@@ -1573,6 +1580,7 @@ dependencies = [
  "egui",
  "musiccraft-commands",
  "musiccraft-dsp",
+ "musiccraft-paths",
  "musiccraft-project",
  "serde",
 ]

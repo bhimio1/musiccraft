@@ -10,6 +10,7 @@ license.workspace = true
 [dependencies]
 musiccraft-commands.workspace = true
 musiccraft-dsp.workspace = true
+musiccraft-paths.workspace = true
 musiccraft-project.workspace = true
 egui.workspace = true
 serde.workspace = true

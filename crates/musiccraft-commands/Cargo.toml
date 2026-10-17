@@ -12,6 +12,7 @@ musiccraft-flp.workspace = true
 musiccraft-formula.workspace = true
 musiccraft-project.workspace = true
 serde.workspace = true
+musiccraft-paths.workspace = true
 serde_json.workspace = true
 
 [lints]

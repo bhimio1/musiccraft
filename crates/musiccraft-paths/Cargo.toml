@@ -1,0 +1,13 @@
+[package]
+name = "musiccraft-paths"
+description = "Finds the files that sample paths from other systems (Windows, FL Studio) refer to"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

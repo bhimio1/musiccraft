@@ -271,6 +271,9 @@ fn import_flp(project: &mut Project, args: &Args<'_>) -> Result<Outcome, Command
     let (imported, report) = crate::flp_import::convert(&bytes, &stem)
         .map_err(|reason| args.invalid(format!("cannot import {}: {reason}", path.display())))?;
     *project = imported;
+    // Samples named for another system resolve now, from the file's folder;
+    // the import keeps the local paths it finds.
+    let localized = super::sample_paths::localize(project, path.parent());
     let mut message = format!(
         "imported {}: {} channels, {} patterns, {} clips, {} mixer tracks",
         path.display(),
@@ -284,6 +287,10 @@ fn import_flp(project: &mut Project, args: &Args<'_>) -> Result<Outcome, Command
     }
     if !report.dropped.is_empty() {
         message.push_str(&format!("; not imported: {}", report.dropped.join("; ")));
+    }
+    let samples = super::sample_paths::summary(&localized);
+    if !samples.is_empty() {
+        message.push_str(&format!("; {samples}"));
     }
     message.push_str("; volumes and pans keep FL's fader positions, not its loudness");
     Ok(Outcome::reset(message))

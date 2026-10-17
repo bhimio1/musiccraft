@@ -53,6 +53,13 @@ pub struct Settings {
     pub browser_folders: Vec<PathBuf>,
     /// Extra folders searched for CLAP plugins.
     pub plugin_folders: Vec<PathBuf>,
+    /// FL Studio's factory data folder, for `%FLStudioFactoryData%` paths.
+    pub fl_factory: Option<PathBuf>,
+    /// FL Studio's user data folder, for `%FLStudioUserData%` paths.
+    pub fl_user: Option<PathBuf>,
+    /// Windows path prefixes (`C:`, `D:/Samples`) and the folders they stand
+    /// for here.
+    pub drive_map: Vec<(String, PathBuf)>,
 }
 
 impl Default for Settings {
@@ -71,6 +78,9 @@ impl Default for Settings {
             start_empty: false,
             browser_folders: crate::browser::default_folders(),
             plugin_folders: Vec::new(),
+            fl_factory: None,
+            fl_user: None,
+            drive_map: Vec::new(),
         }
     }
 }
@@ -84,6 +94,18 @@ impl Settings {
         } else {
             1.0
         }
+    }
+
+    /// The sample path translation these settings describe, on top of what
+    /// the computer offers (see `docs/spec/sample-paths.md`).
+    #[must_use]
+    pub fn path_config(&self) -> musiccraft_paths::PathConfig {
+        musiccraft_paths::PathConfig::detect().with_overrides(&musiccraft_paths::Overrides {
+            fl_factory: self.fl_factory.clone(),
+            fl_user: self.fl_user.clone(),
+            drives: self.drive_map.clone(),
+            search: self.browser_folders.clone(),
+        })
     }
 
     /// Whether `other` differs in anything that needs audio restarted.
@@ -576,6 +598,8 @@ fn folders(ui: &mut egui::Ui, state: &mut UiState, frame: &Frame<'_>, actions: &
         }
     });
     ui.label(format!("{} plugins found", info.plugin_count));
+    ui.add_space(10.0);
+    foreign_paths(ui, state, settings, actions);
     if !info.plugin_errors.is_empty() {
         egui::CollapsingHeader::new(
             RichText::new(format!("{} files failed to load", info.plugin_errors.len()))
@@ -587,6 +611,91 @@ fn folders(ui: &mut egui::Ui, state: &mut UiState, frame: &Frame<'_>, actions: &
             }
         });
     }
+}
+
+/// Folders that sample paths from Windows projects translate to (see
+/// `docs/spec/sample-paths.md`).
+fn foreign_paths(
+    ui: &mut egui::Ui,
+    state: &mut UiState,
+    settings: &Settings,
+    actions: &mut Vec<Action>,
+) {
+    ui.label(RichText::new("Samples from Windows projects").strong());
+    note(
+        ui,
+        "Paths like C:\\… or %FLStudioFactoryData%\\… are looked up here (Wine prefixes, \
+         /mnt drives and your home folder are tried too). Leave empty to detect.",
+    );
+    let [factory, user, from, to] = &mut state.path_drafts;
+    for (label, current, draft, set) in [
+        (
+            "FL Studio factory data",
+            &settings.fl_factory,
+            factory,
+            (|s: &mut Settings, p| s.fl_factory = p) as fn(&mut Settings, Option<PathBuf>),
+        ),
+        (
+            "FL Studio user data",
+            &settings.fl_user,
+            user,
+            |s: &mut Settings, p| s.fl_user = p,
+        ),
+    ] {
+        row(ui, label, |ui| {
+            if draft.is_empty() {
+                if let Some(path) = current {
+                    *draft = path.display().to_string();
+                }
+            }
+            let edit = ui.add(
+                egui::TextEdit::singleline(draft)
+                    .hint_text("detected")
+                    .desired_width(260.0),
+            );
+            if edit.lost_focus() {
+                let value = (!draft.trim().is_empty()).then(|| PathBuf::from(draft.trim()));
+                if value != *current {
+                    let mut next = settings.clone();
+                    set(&mut next, value);
+                    changed(actions, next);
+                }
+            }
+        });
+    }
+    ui.label("Drive mappings");
+    for (i, (prefix, folder)) in settings.drive_map.iter().enumerate() {
+        ui.horizontal(|ui| {
+            if ui.small_button("×").hint("Remove").clicked() {
+                let mut next = settings.clone();
+                next.drive_map.remove(i);
+                changed(actions, next);
+            }
+            ui.label(format!("{prefix}  →  {}", folder.display()));
+        });
+    }
+    ui.horizontal(|ui| {
+        ui.add(
+            egui::TextEdit::singleline(from)
+                .hint_text("C:\\Users\\Ana\\Music")
+                .desired_width(170.0),
+        );
+        ui.label("→");
+        ui.add(
+            egui::TextEdit::singleline(to)
+                .hint_text("/home/ana/Music")
+                .desired_width(170.0),
+        );
+        let ready = !from.trim().is_empty() && !to.trim().is_empty();
+        if ui.add_enabled(ready, egui::Button::new("Add")).clicked() {
+            let mut next = settings.clone();
+            next.drive_map
+                .push((from.trim().to_owned(), PathBuf::from(to.trim())));
+            from.clear();
+            to.clear();
+            changed(actions, next);
+        }
+    });
 }
 
 fn project(ui: &mut egui::Ui, state: &mut UiState, frame: &Frame<'_>, actions: &mut Vec<Action>) {

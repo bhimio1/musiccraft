@@ -22,12 +22,14 @@ musiccraft-cli ──► commands, render, audio                                
 musiccraft-mcp ──► commands, render                                                    │
 xtask ──► commands, render, ui (keymap) ───────────────────────────────────────────────┘
 musiccraft-project, musiccraft-engine ──► musiccraft-meter ──► musiccraft-params
+musiccraft-commands, musiccraft-render, musiccraft-ui ──► musiccraft-paths
 ```
 
 | Crate | Responsibility |
 | --- | --- |
 | `musiccraft-formula` | The formula controllers' expression language: parsing on the main thread, allocation-free evaluation on the audio thread. No dependencies. |
 | `musiccraft-params` | Shared tables: timing (PPQ), instrument and effect parameter specs, built-in sound names. No logic. |
+| `musiccraft-paths` | Translates sample paths written on another system (Windows drives, FL Studio placeholders, Wine prefixes) into local files. No dependencies. |
 | `musiccraft-meter` | Time signatures and the bar and beat grid of a timeline (`TimeSig`, `Meter`). Queries are allocation-free, so the engine uses it too. |
 | `musiccraft-project` | Project data model and JSON file format. No audio, no UI. |
 | `musiccraft-commands` | Command trait, ~70 built-in commands, invocation parsing, undo/redo `Session`; converts FL Studio projects for `project.import_flp`. |

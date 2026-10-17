@@ -42,7 +42,7 @@ usage: musiccraft [project.mcproj] [--keymap <file>] [--empty] [--open <windows>
   --empty            start with an empty project instead of the drum starter kit
   --open <windows>   comma-separated windows to show at start:
                      channel_rack, piano_roll, playlist, mixer, browser,
-                     channel_settings, automation, settings,
+                     channel_settings, automation, settings[:<tab>],
                      effect:<track>:<slot>";
 
 /// A sample's key, min/max overview and length in seconds.
@@ -251,6 +251,8 @@ impl App {
             None => Keymap::default_keymap(),
         };
         let settings = settings::load();
+        // Sample paths from Windows projects translate with these folders.
+        musiccraft_paths::configure(settings.path_config());
         ctx.set_zoom_factor(settings.scale());
         if let Some(host) = musiccraft_cli::plugin_host() {
             host.set_extra_folders(settings.plugin_folders.clone());
@@ -292,8 +294,13 @@ impl App {
                     }
                 }
             }
-            if windows.iter().any(|n| n == "settings") {
-                ui.settings_tab = Some(musiccraft_ui::settings::Tab::Audio);
+            for name in windows.iter() {
+                // `settings` opens Audio; `settings:<tab>` opens that tab.
+                if name == "settings" {
+                    ui.settings_tab = Some(musiccraft_ui::settings::Tab::Audio);
+                } else if let Some(tab) = name.strip_prefix("settings:") {
+                    ui.settings_tab = musiccraft_ui::settings::Tab::parse(tab);
+                }
             }
             if windows.iter().any(|n| n == "automation") {
                 ui.automation_editor = session.project().automations.first().map(|a| a.id);
@@ -490,6 +497,20 @@ impl App {
             let message = self.plugins.rescan(bridge);
             self.refresh_devices();
             self.ui.set_status(message, false);
+        }
+        if (
+            &previous.fl_factory,
+            &previous.fl_user,
+            &previous.drive_map,
+            &previous.browser_folders,
+        ) != (
+            &self.settings.fl_factory,
+            &self.settings.fl_user,
+            &self.settings.drive_map,
+            &self.settings.browser_folders,
+        ) {
+            // Bridges take up the new translation on their next sync.
+            musiccraft_paths::configure(self.settings.path_config());
         }
         if previous.audio_input != self.settings.audio_input {
             // The next take opens the newly chosen device.

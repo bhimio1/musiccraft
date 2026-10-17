@@ -262,8 +262,12 @@ impl Command for SampleEditCommand {
                 self.invalid("save the project first: edited audio is written beside it")
             })?
             .to_path_buf();
+        // A path from another system reads the file it translates to.
+        let source = musiccraft_paths::Resolver::new()
+            .resolve(&sample, Some(&dir))
+            .map_or_else(|| sample.clone(), |p| p.to_string_lossy().into_owned());
         let buffer = SampleCache::new()
-            .get(&sample, Some(&dir), BUILTIN_RATE)
+            .get(&source, Some(&dir), BUILTIN_RATE)
             .map_err(|e| self.invalid(format!("cannot read `{sample}`: {e}")))?;
         let mut audio = Audio {
             left: buffer.left().to_vec(),

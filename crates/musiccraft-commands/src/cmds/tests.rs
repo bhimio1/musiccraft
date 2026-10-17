@@ -1687,3 +1687,57 @@ fn automation_curves_are_set_moved_and_undone() {
     fails(&mut s, "automation.set_curve 1 4 single 2");
     fails(&mut s, "automation.set_curve 1 5 hold");
 }
+
+#[test]
+fn windows_sample_paths_localize_and_imports_report_them() {
+    let root = std::env::temp_dir().join(format!("musiccraft-localize-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("drums")).unwrap();
+    std::fs::write(root.join("drums/kick.wav"), b"x").unwrap();
+    musiccraft_paths::configure(musiccraft_paths::PathConfig {
+        drives: vec![("z:".to_owned(), root.clone())],
+        ..musiccraft_paths::PathConfig::default()
+    });
+    let mut s = session();
+    run(&mut s, "channel.add_sampler builtin:kick");
+    run(&mut s, r#"channel.set_sample 1 "Z:\\Drums\\Kick.WAV""#);
+    // A missing sample is kept as written (added directly: commands refuse it).
+    let mut project = s.project().clone();
+    project.channels.push(musiccraft_project::Channel::new(
+        musiccraft_project::ChannelId(500),
+        "Snare",
+        musiccraft_project::Instrument::Sampler {
+            sample: r"Z:\Missing\snare.wav".to_owned(),
+        },
+    ));
+    s = Session::new(project, Registry::with_builtin());
+    let before = s.project().clone();
+    let message = s.run_line("project.localize_samples").unwrap().message;
+    assert!(message.contains("1 sample path from"), "{message}");
+    assert!(message.contains(r"Z:\Missing\snare.wav"), "{message}");
+    let sample = |s: &Session, i: usize| match &s.project().channels[i].instrument {
+        musiccraft_project::Instrument::Sampler { sample } => sample.clone(),
+        _ => String::new(),
+    };
+    assert_eq!(sample(&s, 0), root.join("drums/kick.wav").to_string_lossy());
+    assert_eq!(
+        sample(&s, 1),
+        r"Z:\Missing\snare.wav",
+        "a missing one is kept"
+    );
+    run(&mut s, "edit.undo");
+    assert_eq!(*s.project(), before);
+    // An FL project's factory sample is reported when it is not found.
+    let message = s
+        .run_line(&format!(
+            "project.import_flp {}",
+            flp_asset("FL 20.8.4.flp")
+        ))
+        .unwrap()
+        .message;
+    assert!(
+        message.contains("samples not found on this system") && message.contains("22in Kick.wav"),
+        "{message}"
+    );
+    musiccraft_paths::configure(musiccraft_paths::PathConfig::default());
+    std::fs::remove_dir_all(root).unwrap();
+}

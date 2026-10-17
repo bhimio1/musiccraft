@@ -17,6 +17,7 @@ musiccraft-dsp = { path = "crates/musiccraft-dsp" }
 musiccraft-ui = { path = "crates/musiccraft-ui" }
 musiccraft-params = { path = "crates/musiccraft-params" }
 musiccraft-meter = { path = "crates/musiccraft-meter" }
+musiccraft-paths = { path = "crates/musiccraft-paths" }
 musiccraft-samples = { path = "crates/musiccraft-samples" }
 musiccraft-render = { path = "crates/musiccraft-render" }
 musiccraft-audio = { path = "crates/musiccraft-audio" }

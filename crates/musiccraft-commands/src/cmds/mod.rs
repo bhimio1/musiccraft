@@ -15,6 +15,7 @@ mod plugin;
 mod project;
 mod rack;
 mod record;
+pub(crate) mod sample_paths;
 mod transport;
 mod zones;
 
@@ -29,6 +30,7 @@ pub(crate) fn all() -> Vec<Box<dyn Command>> {
     commands.extend(transport::commands());
     commands.extend(project::commands());
     commands.extend(meter::commands());
+    commands.extend(sample_paths::commands());
     commands.extend(channel::commands());
     commands.extend(notes::commands());
     commands.extend(note_tools::commands());

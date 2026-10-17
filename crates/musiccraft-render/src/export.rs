@@ -93,6 +93,9 @@ pub fn render_with(
         .with_controllers(base.controllers().to_vec())
         .with_meter(base.meter().clone());
     let _ = handle.send(EngineMessage::SetSequence(Box::new(sequence)));
+    // The sync above left the playhead at the project's own home, which is
+    // a loop region's start when one is set; the export starts at 0.
+    let _ = handle.send(EngineMessage::Seek(0.0));
     let _ = handle.send(EngineMessage::Play);
 
     let body_frames =
