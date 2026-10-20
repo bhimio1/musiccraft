@@ -1790,12 +1790,14 @@ name = "musiccraft-app"
 version = "0.3.0"
 dependencies = [
  "eframe",
+ "getrandom 0.3.4",
  "midir",
  "musiccraft-audio",
  "musiccraft-cli",
  "musiccraft-commands",
  "musiccraft-dsp",
  "musiccraft-engine",
+ "musiccraft-mcp",
  "musiccraft-paths",
  "musiccraft-project",
  "musiccraft-render",

@@ -180,6 +180,13 @@ a tool, plus `run_script`, `get_state`, `get_project` and `analyze_audio`:
 { "mcpServers": { "musiccraft": { "command": "/path/to/target/release/musiccraft-mcp" } } }
 ```
 
+`--dir <folder>` makes relative paths land in that folder. To let an agent work
+in the window you're looking at, start the app with `musiccraft --control <port>
+--control-token-file <file>` and the server with `musiccraft-mcp --bridge
+127.0.0.1:<port> --control-token-file <file>` (`docs/spec/mcp.md`). Release
+downloads include `musiccraft-mcp` and `musiccraft-cli` (on macOS in the
+`MusicCraft-CLI` zip).
+
 ## Development
 
 ```sh

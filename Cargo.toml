@@ -30,6 +30,7 @@ musiccraft-samples = { path = "crates/musiccraft-samples" }
 musiccraft-render = { path = "crates/musiccraft-render" }
 musiccraft-audio = { path = "crates/musiccraft-audio" }
 musiccraft-cli = { path = "crates/musiccraft-cli" }
+musiccraft-mcp = { path = "crates/musiccraft-mcp" }
 musiccraft-clap = { path = "crates/musiccraft-clap" }
 musiccraft-formula = { path = "crates/musiccraft-formula" }
 musiccraft-wavetables = { path = "crates/musiccraft-wavetables" }
@@ -42,6 +43,7 @@ cpal = "0.18"
 rtrb = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+getrandom = "0.3"
 hound = "3.5"
 mp3lame-encoder = "0.2.5"
 vorbis_rs = "0.5.6"

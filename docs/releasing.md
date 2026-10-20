@@ -40,10 +40,11 @@ the bot to bypass the rule, or bump the version yourself in a pull request
 | File | Contents |
 | --- | --- |
 | `MusicCraft-<v>-windows-x64.msi` | Installer: per-machine, `C:\Program Files\MusicCraft`, Start menu shortcut, in-place upgrades. |
-| `MusicCraft-<v>-windows-x64-portable.zip` | `musiccraft.exe` plus a readme; no install. |
+| `MusicCraft-<v>-windows-x64-portable.zip` | `musiccraft.exe`, `musiccraft-cli.exe` and `musiccraft-mcp.exe` plus a readme; no install. |
 | `MusicCraft-<v>-macos-universal.dmg` | `MusicCraft.app` (Apple Silicon and Intel, macOS 11+) with an Applications shortcut. |
+| `MusicCraft-CLI-<v>-macos-universal.zip` | `musiccraft-cli` and `musiccraft-mcp`, universal and ad-hoc signed (a `.app` on a disk image is no place for command-line tools; app hubs such as CreativeCraft fetch this zip next to the `.dmg`). |
 | `MusicCraft-<v>-linux-x86_64.flatpak` | Flatpak bundle, app ID `io.github.bhimio1.MusicCraft`. |
-| `MusicCraft-<v>-linux-x86_64-portable.tar.gz` | Binary plus readme and icon; built on Ubuntu 22.04 (glibc 2.35+). |
+| `MusicCraft-<v>-linux-x86_64-portable.tar.gz` | `musiccraft`, `musiccraft-cli` and `musiccraft-mcp` plus readme and icon; built on Ubuntu 22.04 (glibc 2.35+). The MCP server is checked to answer `initialize`. |
 | `MusicCraft-Plugins-<v>-linux-x86_64.zip`, `-windows-x64.zip`, `-macos-universal.zip` | MusicCraft Effects and MusicCraft Instruments as `.clap` and `.vst3` bundles, a `README.txt` with each system's plugin folders (`packaging/portable/README-plugins.txt`) and the license. macOS bundles are universal and ad-hoc signed. Each zip's bundles are checked before release: present, the right binary inside, and on Linux the CLAP entry point exported. The validators run on every CI build (`docs/spec/validation.md`). |
 | `SHA256SUMS.txt` | Checksums for all of the above. |
 

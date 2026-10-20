@@ -9,6 +9,7 @@
 )]
 
 mod autosave;
+mod control;
 mod midi;
 mod midi_out;
 mod plugins;
@@ -38,12 +39,16 @@ const SHORT_PREVIEW: Duration = Duration::from_millis(220);
 
 const USAGE: &str = "\
 usage: musiccraft [project.mcproj] [--keymap <file>] [--empty] [--open <windows>]
+                 [--dir <folder>] [--control <port> --control-token-file <file>]
   --keymap <file>    use a keymap file instead of the default shortcuts
   --empty            start with an empty project instead of the drum starter kit
   --open <windows>   comma-separated windows to show at start:
                      channel_rack, piano_roll, playlist, mixer, browser,
                      channel_settings, automation, settings[:<tab>],
-                     effect:<track>:<slot>";
+                     effect:<track>:<slot>
+  --dir <folder>     read and write relative paths in this folder
+  --control <port>   let an agent drive this window (musiccraft-mcp --bridge)
+  --control-token-file <file>  where the control token is written";
 
 /// A sample's key, min/max overview and length in seconds.
 type Overview = (String, Vec<(f32, f32)>, f64);
@@ -90,6 +95,8 @@ struct App {
     take: Option<take::Take>,
     takes: u32,
     plugins: plugins::PluginGlue,
+    /// Live mode: an agent driving this window through `musiccraft-mcp --bridge`.
+    control: Option<control::Control>,
     /// The project as last saved, loaded or created; anything else is unsaved.
     saved_json: Option<String>,
     /// An action waiting for the "unsaved changes" question to be answered.
@@ -206,6 +213,8 @@ struct Options {
     keymap: Option<PathBuf>,
     empty: bool,
     open: Option<Vec<String>>,
+    control: Option<u16>,
+    token_file: Option<PathBuf>,
 }
 
 fn parse_args() -> Result<Options, String> {
@@ -214,12 +223,26 @@ fn parse_args() -> Result<Options, String> {
         keymap: None,
         empty: false,
         open: None,
+        control: None,
+        token_file: None,
     };
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--keymap" => options.keymap = Some(args.next().ok_or(USAGE)?.into()),
             "--empty" => options.empty = true,
+            "--dir" => {
+                let dir = args.next().ok_or(USAGE)?;
+                std::env::set_current_dir(&dir).map_err(|e| format!("--dir {dir}: {e}"))?;
+            }
+            "--control" => {
+                let port = args.next().ok_or(USAGE)?;
+                options.control = Some(
+                    port.parse()
+                        .map_err(|_| format!("bad port {port}\n{USAGE}"))?,
+                );
+            }
+            "--control-token-file" => options.token_file = Some(args.next().ok_or(USAGE)?.into()),
             "--open" => {
                 let list = args.next().ok_or(USAGE)?;
                 options.open = Some(list.split(',').map(|w| w.trim().to_owned()).collect());
@@ -306,8 +329,29 @@ impl App {
                 ui.automation_editor = session.project().automations.first().map(|a| a.id);
             }
         }
+        let control = match (options.control, &options.token_file) {
+            (Some(port), Some(file)) => match control::Control::start(port, file, ctx.clone()) {
+                Ok(control) => Some(control),
+                Err(err) => {
+                    status = Some(err);
+                    None
+                }
+            },
+            (Some(_), None) => {
+                status = Some(
+                    "--control needs --control-token-file; agents can't use this window".to_owned(),
+                );
+                None
+            }
+            _ => None,
+        };
         if let Some(text) = status {
             ui.set_status(text, true);
+        } else if control.is_some() {
+            ui.set_status(
+                "An agent can work in this window; you can keep working too.",
+                false,
+            );
         } else if ui.autosave_path.is_some() {
             ui.set_status(
                 "MusicCraft did not close properly last time. File → Recover unsaved work restores it.",
@@ -344,6 +388,7 @@ impl App {
             take: None,
             takes: 0,
             plugins: plugins::PluginGlue::new(musiccraft_cli::plugin_host()),
+            control,
             saved_json,
             pending: None,
             closing: false,
@@ -1128,6 +1173,19 @@ impl App {
         result
     }
 
+    /// Live mode: answers what agents sent since the last frame, against this
+    /// window's session.
+    fn serve_control(&mut self) {
+        let Some(control) = &self.control else {
+            return;
+        };
+        for request in control.pending() {
+            let reply =
+                musiccraft_mcp::Server::with_host(LiveHost(self)).handle_line(&request.line);
+            let _ = request.reply.send(reply);
+        }
+    }
+
     /// Whether the project differs from what was last saved, loaded or created.
     fn has_unsaved_changes(&self) -> bool {
         self.session.project().to_json().ok() != self.saved_json
@@ -1307,6 +1365,7 @@ impl eframe::App for App {
             let bridge = self.audio.as_mut().map(|a| &mut a.bridge);
             self.plugins.poll(bridge, &mut self.session)
         };
+        self.serve_control();
         self.drain_midi();
         self.record_audio();
         self.selected_channel
@@ -1347,6 +1406,43 @@ impl eframe::App for App {
         if let Some(request) = &mut self.screenshot {
             request.tick(&ctx);
         }
+    }
+}
+
+/// The window's session as an MCP server's host: commands run through the
+/// interface's own path, and never discard unsaved work.
+struct LiveHost<'a>(&'a mut App);
+
+impl musiccraft_mcp::Host for LiveHost<'_> {
+    fn session(&self) -> &Session {
+        &self.0.session
+    }
+
+    fn run(
+        &mut self,
+        invocation: &Invocation,
+    ) -> Result<musiccraft_commands::Outcome, musiccraft_commands::CommandError> {
+        let replaces =
+            replaces_project(&invocation.name) || invocation.name == "project.import_flp";
+        if replaces && self.0.has_unsaved_changes() {
+            return Err(musiccraft_commands::CommandError::Io(format!(
+                "{} would discard the window's unsaved changes: save them first (project.save) or ask the user",
+                invocation.name
+            )));
+        }
+        let result = self.0.run_invocation(invocation);
+        match &result {
+            Ok(outcome) => self
+                .0
+                .ui
+                .set_status(format!("Agent: {}", outcome.message), false),
+            Err(err) => self.0.ui.set_status(format!("Agent: {err}"), true),
+        }
+        result
+    }
+
+    fn live(&self) -> bool {
+        true
     }
 }
 

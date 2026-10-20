@@ -40,6 +40,16 @@ commit; this file says what they add up to.
 - Parameter text reads back as typed (no `-0.0`; 999.7 Hz shows `1.00 kHz`).
 - Hosting: our CLAP and VST3 hosts feed plugins' sidechain inputs.
 
+### Agents
+
+- `musiccraft-mcp` and `musiccraft-cli` ship in the release downloads: in the
+  Linux and Windows portable archives, and as `MusicCraft-CLI-<v>-macos-universal.zip`.
+- Live mode: `musiccraft --control <port> --control-token-file <file>` lets an
+  agent work in the open window through `musiccraft-mcp --bridge`, with a
+  private token; it never replaces a project with unsaved changes.
+- `--dir <folder>` (app and MCP server) puts relative paths in that folder.
+  CreativeCraft uses all of this to drive MusicCraft.
+
 ### Export
 
 - MP3 (128–320 kbit/s, LAME) and Ogg Vorbis (quality 0–10) export, in the

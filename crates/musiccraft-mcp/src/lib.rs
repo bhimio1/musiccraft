@@ -7,8 +7,10 @@
 //! and render the project to report levels, so an agent can drive and verify
 //! MusicCraft without a GUI.
 
+pub mod bridge;
+
 use musiccraft_cli::{full_registry, plugin_host};
-use musiccraft_commands::{Invocation, SESSION_COMMANDS, Session};
+use musiccraft_commands::{CommandError, Invocation, Outcome, SESSION_COMMANDS, Session};
 use musiccraft_project::Project;
 use musiccraft_render::{RenderOptions, render_with};
 use serde_json::{Value, json};
@@ -35,9 +37,41 @@ pub fn tool_name(command: &str) -> String {
     command.replace('.', "_")
 }
 
-/// A server holding one project session.
-pub struct Server {
-    session: Session,
+/// Extra instructions when the agent works in the user's open window.
+const LIVE_INSTRUCTIONS: &str = " You are working in the user's open MusicCraft window: \
+they see every change and may be editing too. Save before replacing the project; \
+`project_new` and `project_load` are refused while the window has unsaved changes.";
+
+/// What the server drives: its own headless session, or the session of an open
+/// window (live mode).
+pub trait Host {
+    /// The project session.
+    fn session(&self) -> &Session;
+    /// Runs one command.
+    ///
+    /// # Errors
+    ///
+    /// When the command fails or is refused.
+    fn run(&mut self, invocation: &Invocation) -> Result<Outcome, CommandError>;
+    /// Whether this is the user's open window.
+    fn live(&self) -> bool {
+        false
+    }
+}
+
+impl Host for Session {
+    fn session(&self) -> &Session {
+        self
+    }
+
+    fn run(&mut self, invocation: &Invocation) -> Result<Outcome, CommandError> {
+        Session::run(self, invocation)
+    }
+}
+
+/// A server driving one project session.
+pub struct Server<H: Host = Session> {
+    host: H,
 }
 
 impl Default for Server {
@@ -90,15 +124,41 @@ impl Server {
     /// A server with a fresh project and every command.
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            session: Session::new(Project::default(), full_registry()),
-        }
+        Self::with_host(Session::new(Project::default(), full_registry()))
+    }
+}
+
+impl<H: Host> Server<H> {
+    /// A server driving `host`.
+    pub fn with_host(host: H) -> Self {
+        Self { host }
     }
 
     /// The session (for tests and embedding).
     #[must_use]
     pub fn session(&self) -> &Session {
-        &self.session
+        self.host.session()
+    }
+
+    /// Handles one line of the stdio transport: a message or a batch. Returns
+    /// the line to send back, or `None` when nothing is owed (notifications).
+    pub fn handle_line(&mut self, line: &str) -> Option<String> {
+        if line.trim().is_empty() {
+            return None;
+        }
+        let response = match serde_json::from_str::<Value>(line) {
+            Ok(Value::Array(batch)) => {
+                let replies: Vec<Value> = batch.iter().filter_map(|m| self.handle(m)).collect();
+                (!replies.is_empty()).then_some(Value::Array(replies))
+            }
+            Ok(message) => self.handle(&message),
+            Err(err) => Some(rpc_error(
+                Value::Null,
+                -32700,
+                format!("parse error: {err}"),
+            )),
+        };
+        response.map(|r| r.to_string())
     }
 
     /// Handles one JSON-RPC message. Returns the response, or `None` for
@@ -140,13 +200,17 @@ impl Server {
             "protocolVersion": version,
             "capabilities": { "tools": { "listChanged": false } },
             "serverInfo": { "name": "musiccraft", "version": env!("CARGO_PKG_VERSION") },
-            "instructions": INSTRUCTIONS,
+            "instructions": if self.host.live() {
+                format!("{INSTRUCTIONS}{LIVE_INSTRUCTIONS}")
+            } else {
+                INSTRUCTIONS.to_owned()
+            },
         })
     }
 
     fn list_tools(&self) -> Value {
         let mut tools: Vec<Value> = self
-            .session
+            .session()
             .registry()
             .iter()
             .map(|c| {
@@ -219,7 +283,7 @@ impl Server {
             "run" => self.run_line(&string_arg("line")?),
             "run_script" => self.run_script(&string_arg("script")?),
             "get_state" => text_result(self.state_summary(), false),
-            "get_project" => match self.session.project().to_json() {
+            "get_project" => match self.session().project().to_json() {
                 Ok(json) => text_result(json, false),
                 Err(err) => text_result(err.to_string(), true),
             },
@@ -233,7 +297,7 @@ impl Server {
             }
             tool => {
                 let command = self
-                    .session
+                    .session()
                     .registry()
                     .iter()
                     .map(|c| c.name())
@@ -252,7 +316,7 @@ impl Server {
                     Some(_) => return Err((-32602, "`args` must be an array".to_owned())),
                 };
                 let invocation = Invocation::new(command, args);
-                match self.session.run(&invocation) {
+                match self.host.run(&invocation) {
                     Ok(outcome) => text_result(outcome.message, false),
                     Err(err) => text_result(err.to_string(), true),
                 }
@@ -261,7 +325,7 @@ impl Server {
     }
 
     fn run_line(&mut self, line: &str) -> Value {
-        match self.session.run_line(line) {
+        match Invocation::parse(line).and_then(|invocation| self.host.run(&invocation)) {
             Ok(outcome) => text_result(outcome.message, false),
             Err(err) => text_result(err.to_string(), true),
         }
@@ -278,7 +342,7 @@ impl Server {
                     return text_result(log.join("\n"), true);
                 }
             };
-            match self.session.run(&invocation) {
+            match self.host.run(&invocation) {
                 Ok(outcome) => log.push(format!("> {invocation}\nok: {}", outcome.message)),
                 Err(err) => {
                     log.push(format!("> {invocation}\nerror: {err}"));
@@ -291,7 +355,7 @@ impl Server {
 
     fn command_list(&self) -> String {
         let mut lines: Vec<String> = self
-            .session
+            .session()
             .registry()
             .iter()
             .map(|c| format!("{} — {}", c.usage(), c.summary()))
@@ -308,7 +372,7 @@ impl Server {
     #[must_use]
     pub fn state_summary(&self) -> String {
         use musiccraft_project::music::key_name;
-        let p = self.session.project();
+        let p = self.session().project();
         let mut out = vec![format!(
             "{} — {} BPM in {}, {} mode, transport {}, pattern {}/{} selected",
             p.name(),
@@ -461,7 +525,7 @@ impl Server {
     }
 
     fn analyze(&self, loops: u32) -> String {
-        let project = self.session.project();
+        let project = self.session().project();
         let options = RenderOptions {
             loops,
             ..RenderOptions::default()
@@ -518,6 +582,43 @@ mod tests {
             result["content"][0]["text"].as_str().unwrap().to_owned(),
             result["isError"].as_bool().unwrap(),
         )
+    }
+
+    /// A host that is the user's open window.
+    struct Window(Session);
+
+    impl Host for Window {
+        fn session(&self) -> &Session {
+            &self.0
+        }
+        fn run(&mut self, invocation: &Invocation) -> Result<Outcome, CommandError> {
+            if invocation.name == "project.new" {
+                return Err(CommandError::Io("refused".to_owned()));
+            }
+            self.0.run(invocation)
+        }
+        fn live(&self) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn a_live_host_says_so_and_runs_its_own_way() {
+        let mut server =
+            Server::with_host(Window(Session::new(Project::default(), full_registry())));
+        let init = server
+            .handle(&json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}))
+            .unwrap_or_default();
+        let text = init["result"]["instructions"].as_str().unwrap_or_default();
+        assert!(text.contains("open MusicCraft window"), "{text}");
+        let call = |name: &str| json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": name, "arguments": {}}});
+        let refused = server.handle(&call("project_new")).unwrap_or_default();
+        assert_eq!(refused["result"]["isError"], true);
+        let line = server
+            .handle_line(r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"run","arguments":{"line":"project.set_tempo 111"}}}"#)
+            .unwrap_or_default();
+        assert!(line.contains("tempo 111 BPM"), "{line}");
+        assert!(server.handle_line("  ").is_none());
     }
 
     #[test]

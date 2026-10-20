@@ -14,6 +14,7 @@ path = "src/main.rs"
 [dependencies]
 musiccraft-audio.workspace = true
 musiccraft-cli.workspace = true
+musiccraft-mcp.workspace = true
 musiccraft-commands.workspace = true
 musiccraft-dsp.workspace = true
 musiccraft-paths.workspace = true
@@ -25,6 +26,7 @@ musiccraft-ui.workspace = true
 eframe.workspace = true
 midir.workspace = true
 serde_json.workspace = true
+getrandom.workspace = true
 
 [lints]
 workspace = true

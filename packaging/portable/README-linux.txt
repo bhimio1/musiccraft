@@ -9,5 +9,8 @@ No installation needed: run ./musiccraft from any folder.
   fails to start with a missing-library error.
 - Autosave and recovery files are written to ~/.local/share/musiccraft.
 - For a sandboxed install with a menu entry, use the .flatpak from the same release.
+- musiccraft-cli runs commands and scripts without a window, and ./musiccraft-mcp is
+  an MCP server, so AI agents can make music with MusicCraft (see the project
+  home's README).
 
 Project home: https://github.com/bhimio1/musiccraft
