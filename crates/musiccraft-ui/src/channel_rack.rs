@@ -721,6 +721,13 @@ fn row(
                 egui::StrokeKind::Inside,
             );
         }
+        // The inside is the activity light: it flashes as a note starts.
+        let light = state.activity.get(index).copied().unwrap_or(0.0);
+        if light > 0.0 {
+            let base = if selected { theme::ACCENT } else { theme::RAISED };
+            let fill = theme::mix(base, theme::TEXT, light);
+            ui.painter().rect_filled(pill.shrink(1.0), 1.5, fill);
+        }
         if switch.hint("Select this channel").clicked() {
             state.selected_channel = index;
         }

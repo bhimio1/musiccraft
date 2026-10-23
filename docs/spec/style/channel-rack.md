@@ -101,8 +101,8 @@ There is no per-channel looping and no online loop-library tool in MusicCraft. L
 6. **Selection switch and activity light.** A thin, tall pill set between the name button and the steps, with a small gap on each side (layout target; today it sits at the row's end).
    - The outline shows selection: unlit when the channel is not selected, lit when it is (existing look).
    - Left-click selects this channel only, without opening its settings (existing).
+   - The inside is an activity light. It flashes briefly whenever the channel starts a note, whether during playback, from live input or from a preview (existing).
    - **Proposed (needs `channel-rack.md` updated first):**
-     - The inside is an activity light. It flashes briefly whenever the channel starts a note, whether during playback, from live input or from a preview.
      - Right-click adds the channel to the selection, or removes it.
      - Right-drag sweeps across rows to select a run of channels.
      - Double-click selects all channels.
@@ -393,7 +393,7 @@ Ordered by visual impact. Where a gap changes layout that an existing spec descr
    - Files: `crates/musiccraft-ui/src/channel_rack.rs` (`header`), `crates/musiccraft-ui/src/chrome.rs` (`header` puts the fold arrow first), `docs/spec/window-layout.md`.
 2. **Selection switch position and model.**
    - Today the switch sits at the end of the row after the steps. The guide puts it between the name button and the steps; `docs/spec/window-layout.md` ("Channel rack") and `docs/spec/channel-rack.md` ("Row layout") change first.
-   - Selection is a single index (`UiState::selected_channel` in `crates/musiccraft-ui/src/lib.rs`). There is no multi-select (right-click, right-drag, double-click), no activity flash and no locked state.
+   - Selection is a single index (`UiState::selected_channel` in `crates/musiccraft-ui/src/lib.rs`). There is no multi-select (right-click, right-drag, double-click) and no locked state. The activity flash exists.
    - Files: `crates/musiccraft-ui/src/channel_rack.rs` (`row`).
 3. **Graph editor placement and features.**
    - Today it is a separate short strip below all rows, with the channel name and tabs above the bars. `docs/spec/channel-rack.md` ("Step graph editor": "a strip under the rows") changes first.

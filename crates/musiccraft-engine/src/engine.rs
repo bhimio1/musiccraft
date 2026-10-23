@@ -699,6 +699,7 @@ impl Engine {
             glide_from: None,
         };
         if let Some(graph) = self.graph.as_deref() {
+            record_start(&self.meters, &graph.channels, channel);
             trigger(
                 &mut self.voices,
                 &mut self.voice_counter,
@@ -1002,6 +1003,7 @@ impl Engine {
                     if start >= position {
                         let offset = done + (start - position) / tpf;
                         let start = event_start(event, offset, tpf);
+                        record_start(&self.meters, &graph.channels, start.channel);
                         trigger(
                             &mut self.voices,
                             &mut self.voice_counter,
@@ -1195,6 +1197,21 @@ const PORTA_CHANNELS: usize = 512;
 
 /// Most channels one layer plays.
 const MAX_LAYER: usize = 16;
+
+/// Counts a note start for the activity lights of `channel` and, for a
+/// layer, of the channels it plays.
+fn record_start(meters: &Meters, channels: &[ChannelNode], channel: u16) {
+    meters.record_note(channel);
+    if let Some(ChannelNode {
+        instrument: Instrument::Layer(children),
+        ..
+    }) = channels.get(usize::from(channel))
+    {
+        for child in children.iter().take(MAX_LAYER) {
+            meters.record_note(*child);
+        }
+    }
+}
 
 fn trigger(
     voices: &mut [Voice],

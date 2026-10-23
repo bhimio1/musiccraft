@@ -615,6 +615,8 @@ impl App {
             status.waiting = meters.is_waiting();
             status.voices = meters.active_voices();
             status.peaks = (0..tracks).map(|t| meters.take_peak(t)).collect();
+            let channels = self.session.project().channels.len();
+            status.notes = (0..channels).map(|c| meters.take_notes(c)).collect();
             status.load = meters.load();
             status.pitches = pitch_readings(self.session.project(), meters);
             // Enough for the spectrum analyser; the toolbar scope uses the end.
@@ -1644,7 +1646,8 @@ impl eframe::App for App {
                 .audio
                 .as_ref()
                 .is_some_and(|a| a.bridge.rendering_preset_preview());
-        let meters_moving = self.ui.meters.iter().any(|(l, r)| *l > 1e-4 || *r > 1e-4);
+        let meters_moving = self.ui.meters.iter().any(|(l, r)| *l > 1e-4 || *r > 1e-4)
+            || self.ui.activity.iter().any(|light| *light > 0.0);
         if busy || meters_moving {
             ctx.request_repaint_after(Duration::from_millis(16));
         } else {
@@ -1688,6 +1691,13 @@ impl musiccraft_mcp::Host for App {
     }
 }
 
+/// The app icon (`packaging/icons/make_icons.py`) for the title bar, taskbar and
+/// window switcher. Falls back to egui's default icon if the PNG fails to decode.
+fn window_icon() -> egui::IconData {
+    const PNG: &[u8] = include_bytes!("../../../packaging/icons/musiccraft-256.png");
+    eframe::icon_data::from_png_bytes(PNG).unwrap_or_default()
+}
+
 fn main() -> eframe::Result {
     musiccraft_cli::serve_plugin_probe();
     let options = match parse_args() {
@@ -1704,7 +1714,8 @@ fn main() -> eframe::Result {
             .with_title("MusicCraft")
             // Reverse-DNS ID so Linux desktops match the window to its desktop entry
             // (the Flatpak and the installed .desktop file use the same ID).
-            .with_app_id("io.github.bhimio1.MusicCraft"),
+            .with_app_id("io.github.bhimio1.MusicCraft")
+            .with_icon(window_icon()),
         ..Default::default()
     };
     eframe::run_native(
@@ -1720,6 +1731,13 @@ fn main() -> eframe::Result {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn window_icon_decodes_at_256_px() {
+        let icon = window_icon();
+        assert_eq!((icon.width, icon.height), (256, 256));
+        assert_eq!(icon.rgba.len(), 256 * 256 * 4);
+    }
 
     fn pressed(key: egui::Key) -> Option<UnsavedChoice> {
         let ctx = egui::Context::default();

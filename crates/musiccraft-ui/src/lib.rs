@@ -128,6 +128,8 @@ pub struct EngineStatus {
     pub playing: bool,
     /// Peak levels (left, right) per mixer track since the last frame.
     pub peaks: Vec<(f32, f32)>,
+    /// Notes each channel started since the last frame (activity lights).
+    pub notes: Vec<u32>,
     /// Sounding voices.
     pub voices: u32,
     /// Recent master output samples for the oscilloscope.
@@ -570,6 +572,8 @@ pub struct UiState {
     pub status: StatusLine,
     /// Smoothed meter levels per mixer track.
     pub meters: Vec<(f32, f32)>,
+    /// Activity light strength per channel, 1 as a note starts, fading to 0.
+    pub activity: Vec<f32>,
     /// Location of the last autosave, offered by File → Recover autosave.
     pub autosave_path: Option<String>,
     /// Automation shown in the automation editor.
@@ -713,6 +717,7 @@ impl UiState {
             keymap,
             status: StatusLine::default(),
             meters: Vec::new(),
+            activity: Vec::new(),
             autosave_path: None,
             automation_editor: None,
             automation_ui: automation::EditorState::default(),
@@ -833,7 +838,23 @@ impl UiState {
             meter.1 = peak.1.max(meter.1 * fall);
         }
     }
+
+    /// Lights each channel that started a note and fades the others out
+    /// over [`ACTIVITY_FADE`] seconds.
+    fn update_activity(&mut self, notes: &[u32], channels: usize, dt: f32) {
+        self.activity.resize(channels, 0.0);
+        for (i, light) in self.activity.iter_mut().enumerate() {
+            *light = if notes.get(i).is_some_and(|n| *n > 0) {
+                1.0
+            } else {
+                (*light - dt / ACTIVITY_FADE).max(0.0)
+            };
+        }
+    }
 }
+
+/// Seconds a channel's activity light takes to fade after a note starts.
+const ACTIVITY_FADE: f32 = 0.25;
 
 /// Inputs to one frame of UI.
 pub struct Frame<'a> {
@@ -864,6 +885,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut UiState, frame: &Frame<'_>) -> Vec<Ac
     let mut actions = Vec::new();
     let dt = ui.ctx().input(|i| i.stable_dt).min(0.1);
     state.update_meters(&frame.engine.peaks, dt);
+    state.update_activity(&frame.engine.notes, frame.project.channels.len(), dt);
     if state.browser.folders != frame.settings.browser_folders {
         state
             .browser
@@ -1342,6 +1364,21 @@ mod tests {
     fn frame_for(project: &Project) -> (EngineStatus, History) {
         let _ = project;
         (EngineStatus::default(), History::default())
+    }
+
+    #[test]
+    fn activity_lights_flash_on_note_starts_and_fade() {
+        let mut state = UiState::default();
+        state.update_activity(&[0, 2, 1], 3, 0.016);
+        assert_eq!(state.activity, [0.0, 1.0, 1.0]);
+        state.update_activity(&[0, 0, 1], 3, ACTIVITY_FADE / 2.0);
+        assert!((state.activity[1] - 0.5).abs() < 1e-6);
+        assert_eq!(state.activity[2], 1.0, "a new note relights it");
+        state.update_activity(&[], 3, ACTIVITY_FADE);
+        assert_eq!(state.activity, [0.0, 0.0, 0.0]);
+        // A removed channel's light goes with it.
+        state.update_activity(&[], 2, 0.016);
+        assert_eq!(state.activity.len(), 2);
     }
 
     #[test]
