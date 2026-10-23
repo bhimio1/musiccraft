@@ -288,6 +288,16 @@ fn playlist_slice_and_mute_tools() {
     );
     assert_eq!(cut, ["playlist.slice_clip 1 384t"]);
     h.settle();
+    // Shift+click splits the pattern clip into two new patterns instead (no
+    // bar line inside the one-bar clip, so at the unsnapped click).
+    h.modifiers = Modifiers::SHIFT;
+    let split = h.click(
+        h.playlist_point(TICKS_PER_BAR / 2 + 2, 0),
+        PointerButton::Primary,
+    );
+    h.modifiers = Modifiers::NONE;
+    assert_eq!(split, ["playlist.split_clip 1 194t"]);
+    h.settle();
     // T: the mute tool mutes the clicked clip.
     h.key(egui::Key::T, Modifiers::NONE);
     let muted = h.click(
@@ -295,7 +305,10 @@ fn playlist_slice_and_mute_tools() {
         PointerButton::Primary,
     );
     assert_eq!(muted, ["playlist.toggle_clip_mute 1 384t"]);
-    assert!(h.session.project().playlist.clips[1].muted);
+    assert!(h.session.project().playlist.clips[2].muted);
+    // The split pieces play patterns of their own.
+    let clips = &h.session.project().playlist.clips;
+    assert_ne!(clips[0].pattern(), clips[1].pattern());
 }
 
 #[test]

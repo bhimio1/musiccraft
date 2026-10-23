@@ -99,7 +99,7 @@ fn slice(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError
 }
 
 /// "Name #2", "Name #3", ...: the first that `taken` does not hold.
-fn copy_name(name: &str, taken: impl Fn(&str) -> bool) -> String {
+pub(super) fn copy_name(name: &str, taken: impl Fn(&str) -> bool) -> String {
     let base = name.split(" #").next().unwrap_or(name);
     (2..)
         .map(|n| format!("{base} #{n}"))
@@ -173,7 +173,7 @@ fn make_unique(project: &mut Project, args: &Args<'_>) -> Result<Outcome, Comman
 
 /// The notes a pattern clip plays, at clip-relative ticks: the pattern
 /// repeats for the clip's length, starting `offset` ticks in.
-fn clip_notes(pattern: &Pattern, clip: &Clip) -> Vec<Note> {
+pub(super) fn clip_notes(pattern: &Pattern, clip: &Clip) -> Vec<Note> {
     let period = pattern.length_ticks().max(1);
     let mut notes = Vec::new();
     let mut repeat = clip.offset / period * period;

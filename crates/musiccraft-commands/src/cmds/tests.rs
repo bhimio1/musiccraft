@@ -2513,3 +2513,130 @@ fn swap_sound_moves_the_sound_and_keeps_the_rest() {
     run(&mut s, "edit.redo");
     assert_eq!(s.project().channels[0].name, "Kick");
 }
+
+#[test]
+fn splitting_a_clip_bakes_each_piece_into_its_own_pattern() {
+    let mut s = session();
+    run(&mut s, "channel.add_synth");
+    // A one-bar pattern: notes on steps 0, 6 (two steps long) and 12.
+    run(&mut s, "note.add 1 0 1 C5");
+    run(&mut s, "note.add 1 6 2 D5");
+    run(&mut s, "note.add 1 12 1 E5");
+    run(&mut s, "pattern.record_event channel:1:volume 0");
+    run(&mut s, "playlist.add_clip 1 1 0 2");
+    // Cut half-way into the D5 (steps are 24 ticks): it is shortened, and
+    // the second piece starts after it.
+    run(&mut s, "playlist.split_clip 1 156t");
+    let project = s.project();
+    assert_eq!(project.patterns.len(), 3);
+    assert_eq!(project.patterns[1].name, "Pattern 1 #2");
+    assert_eq!(project.patterns[2].name, "Pattern 1 #3");
+    let notes = |i: usize| -> Vec<(u32, u32, u8)> {
+        s.project().patterns[i]
+            .notes
+            .iter()
+            .map(|n| (n.start, n.length, n.key))
+            .collect()
+    };
+    assert_eq!(notes(1), [(0, 24, 60), (144, 12, 62)]);
+    // E5 of the first bar, then the repeat: C5, D5, E5.
+    assert_eq!(
+        notes(2),
+        [(132, 24, 64), (228, 24, 60), (372, 48, 62), (516, 24, 64)]
+    );
+    assert_eq!(s.project().patterns[1].length_steps, 7);
+    assert_eq!(s.project().patterns[2].length_steps, 26);
+    // The second piece holds the lane's value from its start.
+    let lane = &s.project().patterns[2].automation[0];
+    assert_eq!(lane.points[0].tick, 0);
+    assert_eq!(clip_spans(&s), [(0, 0, 156, 0), (0, 156, 612, 0)]);
+    let ids: Vec<_> = s.project().patterns.iter().map(|p| p.id).collect();
+    let sources: Vec<_> = s
+        .project()
+        .playlist
+        .clips
+        .iter()
+        .map(|c| c.pattern())
+        .collect();
+    assert_eq!(sources, [Some(ids[1]), Some(ids[2])]);
+    fails(&mut s, "playlist.split_clip 1 0");
+    run(&mut s, "edit.undo");
+    assert_eq!(s.project().patterns.len(), 1);
+    assert_eq!(clip_spans(&s), [(0, 0, 768, 0)]);
+    // Audio clips are sliced, not split.
+    run(&mut s, "channel.add_sampler builtin:kick");
+    run(&mut s, "playlist.add_audio_clip 2 2 0 1");
+    fails(&mut s, "playlist.split_clip 2 0.5");
+}
+
+#[test]
+fn splitting_a_pattern_by_channel_stacks_one_clip_per_channel() {
+    let mut s = session();
+    run(&mut s, "channel.add_synth");
+    run(&mut s, "channel.add_sampler builtin:kick");
+    run(&mut s, "channel.rename 1 Lead");
+    run(&mut s, "note.add 2 0 1 C5");
+    run(&mut s, "note.add 1 4 1 E5");
+    run(&mut s, "pattern.record_event channel:2:volume 0");
+    run(&mut s, "pattern.record_event mixer:0:volume 0");
+    fails(&mut s, "pattern.split_by_channel 2");
+    // Two clips of the pattern; track 2 is taken under the second one.
+    run(&mut s, "playlist.add_clip 1 1 0");
+    run(&mut s, "playlist.add_clip 1 1 2");
+    run(&mut s, "pattern.add Other");
+    run(&mut s, "playlist.add_clip 2 2 2");
+    run(&mut s, "pattern.split_by_channel 1");
+    let project = s.project();
+    assert_eq!(project.patterns.len(), 4);
+    assert_eq!(project.current_pattern, 2);
+    let (lead, kick) = (&project.patterns[2], &project.patterns[3]);
+    assert_eq!(lead.name, "Pattern 1 - Lead");
+    assert!(kick.name.starts_with("Pattern 1 - "));
+    assert!(
+        lead.notes
+            .iter()
+            .all(|n| n.channel == project.channels[0].id)
+    );
+    assert!(
+        kick.notes
+            .iter()
+            .all(|n| n.channel == project.channels[1].id)
+    );
+    // The kick's volume lane goes with the kick, the mixer lane with the first.
+    assert_eq!(lead.automation.len(), 1);
+    assert_eq!(kick.automation.len(), 1);
+    let placed: Vec<_> = project
+        .playlist
+        .clips
+        .iter()
+        .map(|c| (c.track, c.start, c.pattern()))
+        .collect();
+    assert_eq!(
+        placed,
+        [
+            (0, 0, Some(lead.id)),
+            (0, 768, Some(lead.id)),
+            (1, 768, Some(project.patterns[1].id)),
+            (2, 0, Some(kick.id)),
+            (2, 768, Some(kick.id)),
+        ]
+    );
+    run(&mut s, "edit.undo");
+    assert_eq!(s.project().patterns.len(), 2);
+    assert_eq!(s.project().current_pattern, 1);
+    assert_eq!(s.project().playlist.clips.len(), 3);
+}
+
+#[test]
+fn splitting_undoes_and_redoes_exactly() {
+    assert_round_trip(&[
+        "channel.add_synth",
+        "channel.add_synth",
+        "note.add 1 0 1 C5",
+        "note.add 2 3 1 G5",
+        "playlist.add_clip 1 1 0 2",
+        "playlist.split_clip 1 1",
+        "pattern.split_by_channel 1",
+        "pattern.split_by_channel 2",
+    ]);
+}
