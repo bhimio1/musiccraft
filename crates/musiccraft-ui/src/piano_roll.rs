@@ -137,8 +137,6 @@ pub struct RollState {
     selection_for: Option<(usize, usize)>,
     /// Rubber-band selection in progress: (origin, current) in screen space.
     marquee: Option<(Pos2, Pos2)>,
-    /// Copied notes, with starts relative to the earliest one.
-    clipboard: Vec<Note>,
     /// Snapped tick under the pointer, used as the paste position.
     hover_tick: Option<u32>,
     /// Time selection made on the ruler, as (start, end) ticks.
@@ -251,7 +249,6 @@ impl Default for RollState {
             selection: BTreeSet::new(),
             selection_for: None,
             marquee: None,
-            clipboard: Vec::new(),
             hover_tick: None,
             time_selection: None,
             offset: Vec2::ZERO,
@@ -927,7 +924,7 @@ fn options_menu(
             (any, "Cut", "Ctrl+X", EditOp::Cut),
             (any, "Copy", "Ctrl+C", EditOp::Copy),
             (
-                !state.roll.clipboard.is_empty(),
+                state.note_clipboard.as_ref().is_some_and(|c| !c.is_empty()),
                 "Paste",
                 "Ctrl+V",
                 EditOp::Paste,
@@ -3088,28 +3085,29 @@ fn edit_op(state: &mut UiState, project: &Project, op: EditOp, actions: &mut Vec
             state.roll.selection.clear();
         }
         EditOp::Copy | EditOp::Cut if !selected.is_empty() => {
-            let first = selected.iter().map(|n| n.start).min().unwrap_or(0);
-            state.roll.clipboard = selected
+            state.note_clipboard = Some(selected.clone());
+            if op == EditOp::Cut {
+                actions.extend(remove_notes(channel, &selected).map(Action::Run));
+                state.roll.selection.clear();
+            }
+        }
+        EditOp::Paste => {
+            let Some(copied) = state.note_clipboard.as_deref().filter(|c| !c.is_empty()) else {
+                return;
+            };
+            // At the pointer the earliest note lands under it; elsewhere
+            // (the Edit menu) the notes keep the times they were copied at.
+            let first = copied.iter().map(|n| n.start).min().unwrap_or(0);
+            let at = state.roll.hover_tick.unwrap_or(first);
+            let placed: Vec<Note> = copied
                 .iter()
                 .map(|n| Note {
                     start: n.start - first,
                     ..*n
                 })
                 .collect();
-            if op == EditOp::Cut {
-                actions.extend(remove_notes(channel, &selected).map(Action::Run));
-                state.roll.selection.clear();
-            }
-        }
-        EditOp::Paste if !state.roll.clipboard.is_empty() => {
-            let at = state.roll.hover_tick.unwrap_or(0);
-            actions.extend(add_notes(channel, &state.roll.clipboard, at).map(Action::Run));
-            state.roll.selection = state
-                .roll
-                .clipboard
-                .iter()
-                .map(|n| (n.start + at, n.key))
-                .collect();
+            actions.extend(add_notes(channel, &placed, at).map(Action::Run));
+            state.roll.selection = placed.iter().map(|n| (n.start + at, n.key)).collect();
         }
         EditOp::Duplicate if !selected.is_empty() => {
             let first = selected.iter().map(|n| n.start).min().unwrap_or(0);

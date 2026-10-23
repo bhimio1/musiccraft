@@ -615,8 +615,10 @@ pub struct UiState {
     pub(crate) graph: Option<piano_roll::LaneMode>,
     /// The channel rack hides its mixer-track column (Alt+M).
     pub(crate) rack_hide_tracks: bool,
-    /// A channel's steps cut or copied in the channel rack.
-    pub(crate) rack_clipboard: Option<Vec<musiccraft_project::Note>>,
+    /// Notes cut or copied in the piano roll or the channel rack, at the
+    /// times they were copied from; either window pastes them into any
+    /// channel and pattern.
+    pub(crate) note_clipboard: Option<Vec<musiccraft_project::Note>>,
     pub(crate) graph_drag: Option<musiccraft_project::Note>,
     /// Where the graph strip was last drawn and its step count (for tests).
     pub(crate) graph_view: Option<(egui::Rect, u32)>,
@@ -732,7 +734,7 @@ impl UiState {
             drive_draft: Default::default(),
             rack_group: None,
             graph: None,
-            rack_clipboard: None,
+            note_clipboard: None,
             rack_hide_tracks: false,
             graph_drag: None,
             graph_view: None,

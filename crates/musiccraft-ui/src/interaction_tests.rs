@@ -4830,3 +4830,98 @@ fn holding_a_piano_key_sounds_it_once_until_release() {
     assert_eq!(all, [(60, true), (60, false)], "{all:?}");
     assert!(h.state.roll.preview.is_none());
 }
+
+#[test]
+fn piano_roll_notes_paste_into_other_patterns_and_channels() {
+    let mut h = Harness::new(&[
+        "channel.add_synth",
+        "channel.add_synth",
+        "note.add 1 2 1 60",
+        "note.add 1 4 1 62",
+        "pattern.add",
+        "pattern.select 1",
+    ]);
+    h.state.windows.piano_roll = true;
+    h.state.roll.key_height = 14.0;
+    h.state.selected_channel = 0;
+    h.settle();
+    h.hover_roll(0, 60);
+    h.key(egui::Key::A, Modifiers::COMMAND);
+    h.frame(vec![Event::Copy]);
+    let step = TICKS_PER_STEP;
+    let notes_of = |h: &Harness, pattern: usize, channel: usize| -> Vec<(u32, u8)> {
+        let project = h.session.project();
+        let id = project.channels[channel].id;
+        project.patterns[pattern]
+            .notes_of(id)
+            .map(|n| (n.start, n.key))
+            .collect()
+    };
+    // Into pattern 2 at the pointer: the earliest note lands under it.
+    h.session.run_line("pattern.select 2").unwrap();
+    h.settle();
+    h.hover_roll(8 * step, 60);
+    let paste = Event::Paste("MusicCraft: notes".to_owned());
+    assert_eq!(h.frame(vec![paste.clone()]).len(), 1);
+    assert_eq!(notes_of(&h, 1, 0), [(8 * step, 60), (10 * step, 62)]);
+    // Into another channel from the Edit menu (pointer off the grid): the
+    // notes keep the times they were copied at.
+    h.state.selected_channel = 1;
+    h.settle();
+    h.frame(vec![Event::PointerGone]);
+    crate::request_clipboard(&h.ctx, crate::ClipboardKey::Paste);
+    assert_eq!(h.frame(vec![]).len(), 1);
+    assert_eq!(notes_of(&h, 1, 1), [(2 * step, 60), (4 * step, 62)]);
+    assert_eq!(notes_of(&h, 0, 0).len(), 2, "the source is untouched");
+}
+
+#[test]
+fn the_rack_and_the_piano_roll_share_one_note_clipboard() {
+    let mut h = Harness::new(&[
+        "channel.add_synth",
+        "channel.add_synth",
+        "channel.add_synth",
+        "step.toggle 1 1",
+        "step.toggle 1 5",
+        "note.add 3 8 1 67",
+    ]);
+    let step = TICKS_PER_STEP;
+    let notes_of = |h: &Harness, channel: usize| -> Vec<(u32, u8)> {
+        let project = h.session.project();
+        let id = project.channels[channel].id;
+        project
+            .current_pattern()
+            .notes_of(id)
+            .map(|n| (n.start, n.key))
+            .collect()
+    };
+    let copied = notes_of(&h, 0);
+    // Steps copied in the rack paste in the piano roll of another channel.
+    h.state.windows.channel_rack = true;
+    h.settle();
+    let rack = window_rect(&h, "channel-rack");
+    h.frame(vec![Event::PointerMoved(rack.center())]);
+    h.state.selected_channel = 0;
+    h.frame(vec![Event::Copy]);
+    h.state.windows.channel_rack = false;
+    h.state.windows.piano_roll = true;
+    h.state.selected_channel = 1;
+    h.settle();
+    h.frame(vec![Event::PointerGone]);
+    let paste = Event::Paste("MusicCraft: steps".to_owned());
+    assert_eq!(h.frame(vec![paste.clone()]).len(), 1);
+    assert_eq!(notes_of(&h, 1), copied);
+    // Notes copied in the piano roll paste over a channel's steps in the rack.
+    h.state.selected_channel = 2;
+    h.settle();
+    h.hover_roll(8 * step, 67);
+    h.key(egui::Key::A, Modifiers::COMMAND);
+    h.frame(vec![Event::Copy]);
+    h.state.windows.piano_roll = false;
+    h.state.windows.channel_rack = true;
+    h.settle();
+    h.frame(vec![Event::PointerMoved(rack.center())]);
+    h.state.selected_channel = 0;
+    assert_eq!(h.frame(vec![paste]).len(), 1, "one undo step");
+    assert_eq!(notes_of(&h, 0), [(8 * step, 67)]);
+}
