@@ -219,14 +219,12 @@ fn patterns_menu(
         run(actions, &format!("pattern.clone {number}"));
         ui.close();
     }
-    let splittable = crate::playlist::splittable(project.current_pattern());
-    if crate::widgets::add_enabled(ui, splittable, egui::Button::new("Split by channel"))
-        .on_hover_text("One pattern per channel, with clips stacked where this one's were")
-        .clicked()
-    {
-        run(actions, &format!("pattern.split_by_channel {number}"));
-        ui.close();
-    }
+    crate::playlist::split_pattern_item(
+        ui,
+        project.current_pattern(),
+        project.current_pattern,
+        actions,
+    );
     menu_item(ui, state, "Rename pattern…", "ui.rename_pattern", actions);
     crate::widgets::enabled_ui(ui, project.patterns.len() > 1, |ui| {
         if ui.button("Delete pattern").clicked() {
