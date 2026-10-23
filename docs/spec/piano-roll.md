@@ -286,11 +286,18 @@ Each tool rewrites all notes of one channel in a pattern as one undo step
   selection tone (`theme::NOTE_SELECTED`), whatever its colour.
 - Keys while the piano roll is the focused window (the topmost one): Delete/Backspace remove the
   selection; Ctrl+A selects all; Escape clears; Ctrl+C / Ctrl+X copy / cut;
-  Ctrl+V pastes at the pointer; Ctrl+B duplicates the selection right after its
+  Ctrl+V pastes at the pointer (the earliest note lands on the snapped tick
+  under it), or at the notes' original times when the pointer is off the grid
+  (from the Edit menu, say); Ctrl+B duplicates the selection right after its
   end (rounded up to the snap); Shift+Up/Down move by one key, Shift+Left/Right
   by one snap step, and Ctrl+Up/Down by an octave (plain arrows do not move
   notes). Every operation is one undo step (`edit.batch`),
   with moves ordered so notes of the selection never overwrite each other.
+- Copied notes go to one note clipboard shared with the channel rack's step
+  copy, so notes copied here paste into another channel or another pattern,
+  in this window or in the rack, and steps copied in the rack paste here. The
+  clipboard keeps its notes until the next copy or cut. The selection belongs
+  to the channel and pattern shown: switching either clears it.
 - Ctrl+scroll zooms horizontally. The scroll/zoom row above the ruler holds a
   left chevron, a rail with a note overview and a thumb, a right chevron and
   the vertical zoom box. The chevrons scroll by one bar (held: repeat); a

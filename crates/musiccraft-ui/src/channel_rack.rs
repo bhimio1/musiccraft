@@ -864,7 +864,7 @@ fn step_items(
 ) {
     use crate::ClipboardKey;
     let number = number.to_owned();
-    let pasting = state.rack_clipboard.is_some();
+    let pasting = state.note_clipboard.is_some();
     for (label, keys, op, enabled) in [
         ("Cut steps", "Ctrl+X", ClipboardKey::Cut, true),
         ("Copy steps", "Ctrl+C", ClipboardKey::Copy, true),
@@ -1350,11 +1350,11 @@ fn step_clipboard(
                 let cut = crate::piano_roll::replace_notes(index, &notes, &[]);
                 actions.extend(cut.map(Action::Run));
             }
-            state.rack_clipboard = Some(notes);
+            state.note_clipboard = Some(notes);
             crate::copied(ctx, "steps");
         }
         ClipboardKey::Paste => {
-            if let Some(copied) = &state.rack_clipboard {
+            if let Some(copied) = &state.note_clipboard {
                 let paste = crate::piano_roll::replace_notes(index, &notes, copied);
                 actions.extend(paste.map(Action::Run));
             }
@@ -1623,7 +1623,7 @@ mod tests {
             (channel, ClipboardKey::Copy),
             &mut actions,
         );
-        assert!(actions.is_empty() && state.rack_clipboard.is_some());
+        assert!(actions.is_empty() && state.note_clipboard.is_some());
         step_clipboard(
             &ctx,
             &mut state,
