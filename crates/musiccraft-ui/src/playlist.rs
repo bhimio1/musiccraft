@@ -1027,6 +1027,7 @@ fn pattern_section(
                             open_in_piano_roll(state, i, actions);
                         }
                         response.context_menu(|ui| {
+                            split_pattern_item(ui, pattern, i, actions);
                             if ui.button("Rename…").clicked() {
                                 state.open_dialog(Dialog::rename_pattern(i, &pattern.name));
                                 ui.close();
@@ -1038,22 +1039,6 @@ fn pattern_section(
                             if ui.button("Clone").clicked() {
                                 actions.push(Action::Run(Invocation::new(
                                     "pattern.clone",
-                                    [(i + 1).to_string()],
-                                )));
-                                ui.close();
-                            }
-                            if crate::widgets::add_enabled(
-                                ui,
-                                splittable(pattern),
-                                egui::Button::new("Split by channel"),
-                            )
-                            .on_hover_text(
-                                "One pattern per channel, with clips stacked where this one's were",
-                            )
-                            .clicked()
-                            {
-                                actions.push(Action::Run(Invocation::new(
-                                    "pattern.split_by_channel",
                                     [(i + 1).to_string()],
                                 )));
                                 ui.close();
@@ -3284,6 +3269,33 @@ fn split_by_channel(project: &Project, clips: &[Clip]) -> Option<Invocation> {
     )
 }
 
+/// The "Split by instrument" entry of a pattern's right-click menus
+/// (`index` 0-based), greyed out with the reason for a one-instrument pattern.
+pub(crate) fn split_pattern_item(
+    ui: &mut egui::Ui,
+    pattern: &musiccraft_project::Pattern,
+    index: usize,
+    actions: &mut Vec<Action>,
+) {
+    let ok = splittable(pattern);
+    let hint = if ok {
+        "Make one pattern per instrument, with their clips stacked where this pattern's clips were"
+    } else {
+        "This pattern plays only one instrument, so there is nothing to split"
+    };
+    if crate::widgets::add_enabled(ui, ok, egui::Button::new("Split by instrument"))
+        .on_hover_text(hint)
+        .on_disabled_hover_text(hint)
+        .clicked()
+    {
+        actions.push(Action::Run(Invocation::new(
+            "pattern.split_by_channel",
+            [(index + 1).to_string()],
+        )));
+        ui.close();
+    }
+}
+
 /// Whether a pattern has notes on two or more channels.
 pub(crate) fn splittable(pattern: &musiccraft_project::Pattern) -> bool {
     let mut channels = pattern.notes.iter().map(|n| n.channel);
@@ -3358,8 +3370,8 @@ fn clip_menu(ui: &mut egui::Ui, state: &mut UiState, frame: &Frame<'_>, actions:
     menu_item(
         ui,
         actions,
-        "Split by channel",
-        "Make one pattern per channel for the selected clips' patterns, with their clips stacked on the tracks below",
+        "Split by instrument",
+        "Make one pattern per instrument for the selected clips' patterns, with their clips stacked on the tracks below",
         split_by_channel(project, &selected),
     );
     menu_item(

@@ -29,7 +29,8 @@ their category.
 
 1. **This project**: Patterns (n), Channels (n), Effects (n), Controllers
    (n), Automation (n), Samples (n), History (n).
-   - A pattern: click selects it (`pattern.select`).
+   - A pattern: click selects it (`pattern.select`); right-click → Split by
+     instrument (`pattern.split_by_channel`, see `playlist.md`).
    - A channel: click selects it and opens its settings window.
    - An effect ("track · effect"): click opens or closes its effect window.
    - Controllers: the controller list (`controllers.md`).
