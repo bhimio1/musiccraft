@@ -211,6 +211,12 @@ pub(super) fn commands() -> Vec<Box<dyn Command>> {
             set_sample,
         ),
         cmd(
+            "channel.swap_sound",
+            "channel.swap_sound <channel> <channel>",
+            "Swap two channels' sounds: name, instrument and its parameters.",
+            swap_sound,
+        ),
+        cmd(
             "channel.set_param",
             "channel.set_param <channel> <param> <value>",
             "Set an instrument parameter (attack, cutoff, root_key, ...).",
@@ -241,11 +247,7 @@ pub(super) fn check_sample(
                 BUILTIN_SAMPLES.join(", ")
             )));
         }
-        let mut label = name.replace('_', " ");
-        if let Some(first) = label.get_mut(0..1) {
-            first.make_ascii_uppercase();
-        }
-        return Ok(label);
+        return Ok(sample_label(sample));
     }
     let path = Path::new(sample);
     let base = project.path().and_then(Path::parent);
@@ -258,11 +260,23 @@ pub(super) fn check_sample(
     if !exists {
         return Err(args.invalid(format!("sample file `{sample}` does not exist")));
     }
-    // The label is the file name, whichever system's separators it uses.
+    Ok(sample_label(sample))
+}
+
+/// The default channel name for a sample: the built-in sound's name, or the
+/// file stem whichever system's separators the path uses.
+fn sample_label(sample: &str) -> String {
+    if let Some(name) = sample.strip_prefix(BUILTIN_PREFIX) {
+        let mut label = name.replace('_', " ");
+        if let Some(first) = label.get_mut(0..1) {
+            first.make_ascii_uppercase();
+        }
+        return label;
+    }
     let name = sample.rsplit(['/', '\\']).next().unwrap_or(sample);
-    Ok(Path::new(name)
+    Path::new(name)
         .file_stem()
-        .map_or_else(|| sample.to_owned(), |s| s.to_string_lossy().into_owned()))
+        .map_or_else(|| sample.to_owned(), |s| s.to_string_lossy().into_owned())
 }
 
 pub(super) fn push_channel(project: &mut Project, channel: Channel) -> Outcome {
@@ -1002,9 +1016,41 @@ fn set_sample(project: &mut Project, args: &Args<'_>) -> Result<Outcome, Command
         _ => return Err(args.invalid(format!("channel {} does not play a sample", index + 1))),
     };
     let previous = std::mem::replace(current, sample.to_owned());
+    // A name still the old sample's default follows the new sample.
+    let channel = &mut project.channels[index];
+    let renamed = channel.name == sample_label(&previous);
+    if renamed {
+        channel.name = sample_label(sample);
+    }
+    let number = (index + 1).to_string();
+    let mut inverse = Invocation::new(args.name(), [number.clone(), previous]);
+    if !renamed && channel.name == sample_label(sample) {
+        // Undo would take this typed name for a default one; restore it.
+        let rename = Invocation::new("channel.rename", [number, channel.name.clone()]);
+        inverse = Invocation::new(BATCH, [inverse.to_string(), rename.to_string()]);
+    }
     Ok(Outcome::undoable(
         format!("channel {} plays {sample}", index + 1),
-        Invocation::new(args.name(), [(index + 1).to_string(), previous]),
+        inverse,
+    ))
+}
+
+fn swap_sound(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
+    args.expect(2, 2)?;
+    let a = channel_arg(project, args, 0)?;
+    let b = channel_arg(project, args, 1)?;
+    if a != b {
+        let (low, high) = (a.min(b), a.max(b));
+        let (left, right) = project.channels.split_at_mut(high);
+        let (x, y) = (&mut left[low], &mut right[0]);
+        std::mem::swap(&mut x.name, &mut y.name);
+        std::mem::swap(&mut x.instrument, &mut y.instrument);
+        std::mem::swap(&mut x.params, &mut y.params);
+    }
+    let name = &project.channels[a].name;
+    Ok(Outcome::undoable(
+        format!("channel {} plays {name}", a + 1),
+        Invocation::new(args.name(), [(a + 1).to_string(), (b + 1).to_string()]),
     ))
 }
 

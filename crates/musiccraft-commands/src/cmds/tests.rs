@@ -1,5 +1,5 @@
 use musiccraft_project::params::{TICKS_PER_STEP, inst};
-use musiccraft_project::{PlayMode, Project, TimeSig};
+use musiccraft_project::{Instrument, PlayMode, Project, TimeSig};
 
 use crate::{CommandError, Registry, Session};
 
@@ -54,6 +54,8 @@ const SCRIPT: &[&str] = &[
     "channel.set_solo 1 off",
     "channel.route 1 2",
     "channel.set_sample 1 builtin:clap",
+    "channel.swap_sound 1 2",
+    "channel.swap_sound 2 1",
     "channel.set_param 3 cutoff 1200",
     "channel.set_param 3 wave1 3",
     "step.toggle 1 0",
@@ -1251,6 +1253,7 @@ fn errors_leave_the_project_unchanged() {
         "channel.set_param 1 wobble 1",
         "channel.set_param 1 cutoff 5",
         "channel.set_sample 1 builtin:kick",
+        "channel.swap_sound 1 9",
         "channel.route 1 99",
         "note.add 1 0 0 60",
         "note.add 1 0 1 C99",
@@ -2453,4 +2456,60 @@ fn moving_a_marker_keeps_its_name_and_action() {
     assert_eq!(s.project().playlist.markers[0].tick, 2 * bar);
     run(&mut s, "playlist.set_time_signature 8 3/4");
     fails(&mut s, "playlist.move_marker 8 9");
+}
+
+#[test]
+fn set_sample_renames_a_default_name_only() {
+    let mut s = session();
+    run(&mut s, "channel.add_sampler builtin:kick");
+    run(&mut s, "channel.add_sampler builtin:kick Boom");
+    run(&mut s, "channel.add_sampler builtin:kick Clap");
+    for n in 1..=3 {
+        run(&mut s, &format!("channel.set_sample {n} builtin:clap"));
+    }
+    let names = |s: &Session| -> Vec<String> {
+        s.project()
+            .channels
+            .iter()
+            .map(|c| c.name.clone())
+            .collect()
+    };
+    assert_eq!(names(&s), ["Clap", "Boom", "Clap"]);
+    for _ in 1..=3 {
+        run(&mut s, "edit.undo");
+    }
+    // A typed name that happens to match the new default is kept on undo.
+    assert_eq!(names(&s), ["Kick", "Boom", "Clap"]);
+}
+
+#[test]
+fn swap_sound_moves_the_sound_and_keeps_the_rest() {
+    let mut s = session();
+    run(&mut s, "channel.add_synth Lead");
+    run(&mut s, "channel.set_volume 1 0.5");
+    run(&mut s, "channel.route 1 2");
+    run(&mut s, "note.add 1 0 1 C4");
+    run(&mut s, "channel.set_param 1 cutoff 1200");
+    run(&mut s, "channel.add_sampler builtin:clap");
+    let before = s.project().clone();
+    // What a drop from the browser runs: add, swap, remove the added one.
+    run(
+        &mut s,
+        r#"edit.batch "channel.add_sampler builtin:kick" "channel.swap_sound 1 3" "channel.remove 3""#,
+    );
+    let p = s.project();
+    assert_eq!(p.channels.len(), 2);
+    let lead = &p.channels[0];
+    assert_eq!(lead.id, before.channels[0].id);
+    assert_eq!(lead.name, "Kick");
+    assert!(matches!(&lead.instrument, Instrument::Sampler { sample } if sample == "builtin:kick"));
+    assert_eq!(lead.volume, 0.5);
+    assert_eq!(lead.mixer_track, before.channels[0].mixer_track);
+    assert_ne!(lead.params, before.channels[0].params);
+    assert_eq!(p.patterns[0].notes.len(), 1);
+    assert_eq!(p.patterns[0].notes[0].channel, lead.id);
+    run(&mut s, "edit.undo");
+    assert_eq!(s.project().channels, before.channels);
+    run(&mut s, "edit.redo");
+    assert_eq!(s.project().channels[0].name, "Kick");
 }

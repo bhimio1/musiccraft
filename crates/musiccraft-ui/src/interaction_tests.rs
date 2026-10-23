@@ -2486,7 +2486,7 @@ fn double_clicking_a_channel_name_renames_it_in_place() {
 }
 
 #[test]
-fn dropping_a_sound_on_a_sampler_row_replaces_its_sample() {
+fn dropping_on_a_channel_row_replaces_its_sound() {
     let mut h = Harness::new(&["channel.add_sampler builtin:kick", "channel.add_synth"]);
     h.state.windows.channel_rack = true;
     h.settle();
@@ -2499,11 +2499,8 @@ fn dropping_a_sound_on_a_sampler_row_replaces_its_sample() {
             .map(|(_, span)| span.center())
             .expect("the row is drawn")
     };
-    let drop_at = |h: &mut Harness, y: f32| {
-        egui::DragAndDrop::set_payload(
-            &h.ctx,
-            crate::browser::Dragged::Sample("builtin:clap".to_owned()),
-        );
+    let drop_with = |h: &mut Harness, dragged: crate::browser::Dragged, y: f32| {
+        egui::DragAndDrop::set_payload(&h.ctx, dragged);
         let at = pos2(rack.center().x, y);
         h.frame(vec![Event::PointerMoved(at)]);
         h.frame(vec![Event::PointerButton {
@@ -2513,14 +2510,45 @@ fn dropping_a_sound_on_a_sampler_row_replaces_its_sample() {
             modifiers: Modifiers::NONE,
         }])
     };
+    let clap = || crate::browser::Dragged::Sample("builtin:clap".to_owned());
+    // A sampler only changes its sample.
     let sampler = span(&h, 0);
     assert_eq!(
-        drop_at(&mut h, sampler),
+        drop_with(&mut h, clap(), sampler),
         ["channel.set_sample 1 builtin:clap"]
     );
-    // Over the synth's row it is added as a new channel instead.
+    // Any other channel takes the sound of a channel added for the drop.
     let synth = span(&h, 1);
-    assert_eq!(drop_at(&mut h, synth), ["channel.add_sampler builtin:clap"]);
+    let out = drop_with(&mut h, clap(), synth);
+    assert_eq!(
+        out,
+        [
+            r#"edit.batch "channel.add_sampler builtin:clap" "channel.swap_sound 2 3" "channel.remove 3""#
+        ]
+    );
+    let generator = crate::browser::Dragged::Generator {
+        label: "FM".to_owned(),
+        add: musiccraft_commands::Invocation::bare("channel.add_fm"),
+    };
+    assert_eq!(
+        drop_with(&mut h, generator.clone(), sampler),
+        [r#"edit.batch channel.add_fm "channel.swap_sound 1 3" "channel.remove 3""#]
+    );
+    // Below the rows it adds a channel.
+    let below = span(&h, 1) + 40.0;
+    assert_eq!(drop_with(&mut h, generator, below), ["channel.add_fm"]);
+    // The rows kept their places and took the new sounds.
+    let channels = &h.session.project().channels;
+    assert_eq!(channels.len(), 3);
+    assert!(matches!(
+        channels[0].instrument,
+        musiccraft_project::Instrument::Fm
+    ));
+    assert_eq!(channels[1].name, "Clap");
+    assert!(matches!(
+        channels[1].instrument,
+        musiccraft_project::Instrument::Sampler { .. }
+    ));
 }
 
 #[test]

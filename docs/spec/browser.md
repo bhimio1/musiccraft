@@ -65,16 +65,18 @@ their category.
   Presets tabs, which open on their own.
 - Sounds: click selects and previews, double-click adds a sampler channel,
   right-click offers the "Add as" choices, and they can be dragged onto the
-  channel rack or the playlist. Dropped on a sampler channel's row, a sound
-  replaces that channel's sample (the row is outlined while it hovers);
-  anywhere else in the rack it adds a sampler channel.
+  channel rack or the playlist. Dropped on a channel's row, a sound
+  replaces that channel's sound (the row is outlined while it hovers; see
+  "Replacing a channel's sound" in `channel-rack.md`); anywhere else in the
+  rack it adds a sampler channel.
 - Presets: click selects and previews, as a sound does: the preset plays
   middle C for about a second and a half, then its release, on the master
   output (the rendered preview is kept, so a second click plays at once).
 - Generators, effects and presets: click selects (generators and effects
   do not preview); double-click adds a
   generator or preset as a new channel, or an effect to the selected mixer
-  track. Generators and presets can be dragged onto the channel rack.
+  track. Generators and presets can be dragged onto the channel rack: onto a
+  channel's row they replace its sound, anywhere else they add a channel.
   Effects (built-in and installed) can be dragged onto a mixer strip, which
   is outlined while one hovers, or onto the slot panel (the selected
   track); the effect goes into that track's first free slot. Effects

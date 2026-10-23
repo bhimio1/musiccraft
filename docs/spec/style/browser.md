@@ -248,10 +248,11 @@ Behaviour by type:
 | Dragged | Dropped on | Result |
 |---|---|---|
 | Sound | Empty part of the channel rack | New sampler channel (`channel.add_sampler`, existing) |
-| Sound | An existing channel row | Replaces that channel's sample (`channel.set_sample`). **Proposed (needs `channel-rack.md` updated first)**; today it adds a new channel |
+| Sound | An existing channel row | Replaces that channel's sound: a sampler's sample (`channel.set_sample`), or any other instrument with a sampler (see `channel-rack.md`) |
 | Sound | Playlist track | Sampler channel plus an audio clip at the snapped drop position on that track (existing, `docs/spec/playlist.md`) |
 | Sound | Sample editor / zone editor / kit pad | Loads it there |
-| Generator or preset | Channel rack | New channel (existing for generators) |
+| Generator or preset | An existing channel row | Replaces that channel's sound (`channel.swap_sound`, see `channel-rack.md`) |
+| Generator or preset | Empty part of the channel rack | New channel |
 | Generator or preset | A mixer strip | New channel routed to that mixer track (own design) |
 | Effect | A mixer strip | Effect added in the strip's first free slot (`mixer.add_effect` / `mixer.add_plugin`) |
 | Effect | A specific slot in the mixer's effect list | Added at that slot |

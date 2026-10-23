@@ -19,6 +19,24 @@
   `channel.toggle_mute`, `channel.solo`, `channel.route`, `channel.set_sample` and
   `channel.set_param` edit channels. All are undoable. Removing a channel removes
   its notes from every pattern; undo restores both.
+- `channel.set_sample <n> <sample>` changes the sample of a sampler,
+  granular or resynth channel. When the channel's name is still the default
+  name of its old sample (the file stem or built-in sound's name), the name
+  follows the new sample; a name the user typed is kept. Undo restores both.
+- `channel.swap_sound <a> <b>` swaps the sounds of two channels: their names,
+  instruments and instrument parameters. Everything else (steps and notes,
+  volume, pan, mute and solo, mixer track, group, colour, the place in the
+  rack and layers that use the channel) stays with the channel. Swapping
+  again undoes it.
+- **Replacing a channel's sound** (UI): dropping a sound, generator or preset
+  from the browser onto a channel's row replaces that channel's sound, and the
+  row is outlined while it hovers. A sound dropped on a sampler, granular or
+  resynth channel only changes its sample (`channel.set_sample`), keeping its
+  settings. Anything else (a sound on a synth, a generator or preset on any
+  row) adds the new channel, gives the target its sound with
+  `channel.swap_sound`, and removes the added channel, in one
+  `edit.batch`: one undo step. Dropped anywhere else in the rack, the item
+  adds a new channel.
 - `channel.route_free <n>` routes a channel to the first mixer insert that no
   other channel feeds and that has no effects, adding an insert when none is
   free, and names that insert after the channel (one undo step).
@@ -456,6 +474,11 @@ square partials), normalized to a 0.9 peak and faded out at the end.
   erase when dragged follow the step sequencer workflow described in the FL
   Studio online manual, "Channel Rack". The routing box's labels and the
   browser's select-then-double-click behaviour are our own design.
+- Replacing a channel's sound by dropping a browser item on its row follows
+  the FL Studio online manual, "Channel Rack" and "Browser" (dragging a
+  sample or plugin onto a channel button), with the owner's request of
+  2026-10-23. What is kept, the rename rule and the commands are our own
+  design.
 - The solo lock (Shift+click on the mute light) follows the FL Studio online
   manual, "Channel Rack", "12. Mute Control"; the padlock is our own glyph.
 - F4 selecting the next empty pattern and offering to name it follows the FL
