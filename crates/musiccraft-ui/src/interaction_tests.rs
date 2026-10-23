@@ -5046,3 +5046,27 @@ fn a_clipped_strip_does_not_take_clicks_on_the_slot_panel() {
         assert!(opened > 0, "the slot chevron left of {left}");
     }
 }
+
+#[test]
+fn right_clicking_a_pattern_offers_split_by_instrument_first() {
+    let mut h = Harness::new(&[
+        "channel.add_synth",
+        "channel.add_synth",
+        "note.add 1 0 1 C5",
+        "note.add 2 4 1 E5",
+        "playlist.add_clip 1 1 0",
+    ]);
+    h.state.windows.playlist = true;
+    h.settle();
+    let items = h.state.playlist.picker_items.clone();
+    h.click(items[0].center(), PointerButton::Secondary);
+    h.settle();
+    let menu = h
+        .ctx
+        .memory(|m| m.areas().top_layer_id(egui::Order::Foreground))
+        .expect("the pattern menu");
+    let area = h.ctx.memory(|m| m.area_rect(menu.id)).expect("its rect");
+    let out = h.click(area.left_top() + vec2(30.0, 12.0), PointerButton::Primary);
+    assert_eq!(out, ["pattern.split_by_channel 1"]);
+    assert_eq!(h.session.project().patterns.len(), 3);
+}

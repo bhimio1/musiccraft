@@ -214,12 +214,15 @@
   stretch: clips inside it go, clips across its edges are cut back, and later
   clips and markers move earlier. Both are one undo step.
 - UI: the playlist's window menu → Clip acts on the selected clips (Slice at
-  playhead, Split at playhead into new patterns, Split by channel (the
-  selected clips' patterns), Make independent copy, Merge, Consolidate,
-  Reverse, fades; the pattern list's right-click menu and the toolbar's
-  Patterns menu have Split by channel too), and
-  window menu → Edit → Insert time / Remove time inserts or removes the loop
-  region's time; Ctrl+Insert and Ctrl+Delete do the same (they need a loop
+  playhead, Split at playhead into new patterns, Split by instrument (the
+  selected clips' patterns, `pattern.split_by_channel`), Make independent
+  copy, Merge, Consolidate, Reverse, fades). Right-clicking a pattern in the
+  pattern list or in the browser's "This project → Patterns" opens a menu
+  whose first entry is Split by instrument, also in the toolbar's Patterns
+  menu; it is greyed out, with the reason on hover, for a pattern that plays
+  one instrument. Right-clicking a clip still deletes it; its menu is on
+  its glyph. Window menu → Edit → Insert time / Remove time inserts or
+  removes the loop region's time; Ctrl+Insert and Ctrl+Delete do the same (they need a loop
   region: Shift+drag the ruler).
 
 ## Audio recording

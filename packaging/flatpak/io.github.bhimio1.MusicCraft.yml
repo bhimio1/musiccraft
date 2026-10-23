@@ -6,7 +6,7 @@
 # the `sources` below with a source build using the rust-stable SDK extension and
 # vendored crates (see docs/releasing.md).
 #
-# Local build, after copying target/release/musiccraft and the icon into this folder
+# Local build, after copying target/release/musiccraft and the icon PNGs into this folder
 # (the release workflow does this; see "Flatpak" in docs/releasing.md):
 #   flatpak-builder --user --install-deps-from=flathub --force-clean build-dir \
 #     io.github.bhimio1.MusicCraft.yml
@@ -41,6 +41,8 @@ modules:
       - install -Dm644 ONNXRUNTIME-LICENSE.txt /app/share/licenses/io.github.bhimio1.MusicCraft/ONNXRUNTIME-LICENSE.txt
       - install -Dm644 io.github.bhimio1.MusicCraft.desktop /app/share/applications/io.github.bhimio1.MusicCraft.desktop
       - install -Dm644 io.github.bhimio1.MusicCraft.metainfo.xml /app/share/metainfo/io.github.bhimio1.MusicCraft.metainfo.xml
+      - install -Dm644 musiccraft-128.png /app/share/icons/hicolor/128x128/apps/io.github.bhimio1.MusicCraft.png
+      - install -Dm644 musiccraft-256.png /app/share/icons/hicolor/256x256/apps/io.github.bhimio1.MusicCraft.png
       - install -Dm644 musiccraft-512.png /app/share/icons/hicolor/512x512/apps/io.github.bhimio1.MusicCraft.png
     sources:
       - type: file
@@ -49,6 +51,10 @@ modules:
         path: io.github.bhimio1.MusicCraft.desktop
       - type: file
         path: io.github.bhimio1.MusicCraft.metainfo.xml
+      - type: file
+        path: musiccraft-128.png
+      - type: file
+        path: musiccraft-256.png
       - type: file
         path: musiccraft-512.png
       - type: file

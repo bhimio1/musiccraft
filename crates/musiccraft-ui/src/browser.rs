@@ -1265,19 +1265,21 @@ fn this_project(
                     for (i, pattern) in &patterns {
                         let key = format!("pattern:{}", pattern.id.0);
                         let swatch = crate::pattern_color(pattern).unwrap_or(theme::CLIP_NEUTRAL);
-                        if row(
+                        let response = row(
                             ui,
                             &Row::new(&key, 2, Glyph::Swatch(swatch), &pattern.name),
                             Sense::click(),
                         )
-                        .hint("Click to select this pattern")
-                        .clicked()
-                        {
+                        .hint("Click to select this pattern · right-click for its menu");
+                        if response.clicked() {
                             actions.push(Action::Run(Invocation::new(
                                 "pattern.select",
                                 [(i + 1).to_string()],
                             )));
                         }
+                        response.context_menu(|ui| {
+                            crate::playlist::split_pattern_item(ui, pattern, *i, actions);
+                        });
                     }
                 },
             );
