@@ -26,9 +26,22 @@
 ## Chords, scales and recording
 
 - `note.add_chord <channel> <start> <length> <root> <quality> [velocity]` adds
-  the notes of a chord (major, minor, dim, aug, sus2, sus4, maj7, min7, dom7,
-  dim7, add9) as one undo step. The piano roll's chord menu makes a click draw
-  the chosen chord.
+  the notes of a chord as one undo step, built upward from the root. The
+  qualities come in six families:
+  - Triads: major, minor, dim, aug, sus2, sus4, power (root and fifth),
+    power8 (power plus the octave), majb5.
+  - Sixths: 6, min6, 6/9, min6/9.
+  - Sevenths: maj7, min7, dom7, dim7, min7b5 (half-diminished), minmaj7,
+    aug7, augmaj7, 7b5, maj7b5, 7sus2, 7sus4.
+  - Ninths: add9, minadd9, dom9, maj9, min9, minmaj9, 9sus4, 7b9, 7#9, 7#5,
+    7#5b9.
+  - Elevenths: add11, minadd11, dom11, maj11, min11, 7#11, maj7#11, 9#11.
+  - Thirteenths: dom13, maj13, min13, 13sus4, 7b13, 13b9, 13#11.
+  Extended chords keep every tone up to the named one, except that 13ths drop
+  the natural 11th (it clashes with the major third). A chord that would go
+  above key 127 is refused. The piano roll's chord menu (header button and
+  window menu) shows "Note" and then one column per family; picking a chord
+  makes a click draw it.
 - The scale menu highlights a scale (major, natural and harmonic minor,
   dorian, mixolydian, major and minor pentatonic) on any root. The usual
   black/white key-row shading is replaced: rows in the scale are a step
@@ -395,3 +408,7 @@ Each tool rewrites all notes of one channel in a pattern as one undo step
   and claw machine mirror the piano roll tools listed in the FL Studio online
   manual, "Piano roll" (tools menu). Every rule above (ranges, centres, the
   random grid, triad stacking) is our own design.
+- Chord qualities: the idea of a broad chord menu follows the chord list in
+  the FL Studio online manual, "Piano roll" section. The chord names, their
+  intervals and the families are standard music theory; the grouping, naming
+  scheme and voicing rules are our own.

@@ -1161,19 +1161,28 @@ fn snap_list(ui: &mut egui::Ui, state: &mut UiState) {
     }
 }
 
-/// Single notes or a chord for the Draw tool (header picker and window menu).
+/// Single notes or a chord for the Draw tool (header picker and window menu):
+/// "Note", then one column per chord family.
 fn chord_list(ui: &mut egui::Ui, state: &mut UiState) {
     let chord = state.roll.chord;
     if ui.selectable_label(chord.is_none(), "Note").clicked() {
         state.roll.chord = None;
         ui.close();
     }
-    for (name, _) in musiccraft_project::music::CHORDS {
-        if ui.selectable_label(chord == Some(name), name).clicked() {
-            state.roll.chord = Some(name);
-            ui.close();
+    ui.separator();
+    ui.horizontal_top(|ui| {
+        for (family, chords) in musiccraft_project::music::CHORD_GROUPS {
+            ui.vertical(|ui| {
+                ui.weak(family);
+                for (name, _) in chords {
+                    if ui.selectable_label(chord == Some(name), *name).clicked() {
+                        state.roll.chord = Some(name);
+                        ui.close();
+                    }
+                }
+            });
         }
-    }
+    });
 }
 
 fn canvas(ui: &mut egui::Ui, state: &mut UiState, frame: &Frame<'_>, actions: &mut Vec<Action>) {

@@ -1657,6 +1657,33 @@ fn chords_add_stacked_notes() {
 }
 
 #[test]
+fn extended_chords_stack_their_tones() {
+    let mut s = session();
+    run(&mut s, "channel.add_synth");
+    for (quality, expected) in [
+        ("power", &[60, 67][..]),
+        ("6/9", &[60, 64, 67, 69, 74]),
+        ("min7b5", &[60, 63, 66, 70]),
+        ("7#9", &[60, 64, 67, 70, 75]),
+        ("min11", &[60, 63, 67, 70, 74, 77]),
+        ("dom13", &[60, 64, 67, 70, 74, 81]),
+    ] {
+        run(&mut s, &format!("note.add_chord 1 0 4 C5 {quality}"));
+        let mut keys: Vec<u8> = s
+            .project()
+            .current_pattern()
+            .notes
+            .iter()
+            .map(|n| n.key)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(keys, expected, "{quality}");
+        run(&mut s, "edit.undo");
+    }
+    fails(&mut s, "note.add_chord 1 0 4 G9 dom13");
+}
+
+#[test]
 fn removing_a_track_fixes_sends_pointing_at_and_past_it() {
     let mut s = session();
     run(&mut s, "mixer.set_send 1 3 0.5");

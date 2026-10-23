@@ -659,7 +659,7 @@ fn import_midi(project: &mut Project, args: &Args<'_>) -> Result<Outcome, Comman
 }
 
 fn add_chord(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
-    use musiccraft_project::music::{CHORDS, chord};
+    use musiccraft_project::music::{chord, chords};
     args.expect(5, 6)?;
     let target = Target::resolve(project, args)?;
     let start = args.time(1, TICKS_PER_STEP)?;
@@ -667,7 +667,7 @@ fn add_chord(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandE
     let root = args.key(3)?;
     let quality = args.str(4)?;
     let intervals = chord(quality).ok_or_else(|| {
-        let names: Vec<_> = CHORDS.iter().map(|(n, _)| *n).collect();
+        let names: Vec<_> = chords().map(|(n, _)| n).collect();
         args.invalid(format!(
             "unknown chord `{quality}`; choose from {}",
             names.join(", ")
