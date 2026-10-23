@@ -313,7 +313,7 @@ jobs:
           cp linux-binary/musiccraft build-src/musiccraft
           cp linux-binary/libonnxruntime.so linux-binary/ONNXRUNTIME-LICENSE.txt build-src/
           cp packaging/flatpak/$APP_ID.yml packaging/flatpak/$APP_ID.desktop build-src/
-          cp packaging/icons/musiccraft-512.png build-src/
+          cp packaging/icons/musiccraft-128.png packaging/icons/musiccraft-256.png packaging/icons/musiccraft-512.png build-src/
           sed -e "s/@VERSION@/$VERSION/" -e "s/@DATE@/$(date -u +%F)/" \
             packaging/flatpak/$APP_ID.metainfo.xml.in > build-src/$APP_ID.metainfo.xml
       - name: Build
