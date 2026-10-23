@@ -115,6 +115,8 @@ pub struct RollState {
     pub(crate) velocity: u8,
     drag: Option<NoteDrag>,
     pub(crate) preview: Option<(usize, u8)>,
+    /// The preview is a key held on the keyboard, which releases it itself.
+    keys_held: bool,
     /// Channel the view was last centred for.
     centred_for: Option<usize>,
     /// Grid and visible area from the last frame (used by tests and tools).
@@ -237,6 +239,7 @@ impl Default for RollState {
             velocity: 100,
             drag: None,
             preview: None,
+            keys_held: false,
             centred_for: None,
             last_view: None,
             chord: None,
@@ -2858,7 +2861,7 @@ fn edit(
             }
         }
     }
-    if !response.dragged() {
+    if !response.dragged() && !state.roll.keys_held {
         if let Some((ch, key)) = state.roll.preview.take() {
             actions.push(Action::Preview {
                 channel: ch,
@@ -3608,6 +3611,7 @@ fn keyboard(
                 on: true,
             });
             state.roll.preview = Some((channel, key));
+            state.roll.keys_held = true;
         }
         (Some(key), Some((ch, old))) if old != key && state.roll.drag.is_none() => {
             actions.push(Action::Preview {
@@ -3629,6 +3633,7 @@ fn keyboard(
                 on: false,
             });
             state.roll.preview = None;
+            state.roll.keys_held = false;
         }
         _ => {}
     }
