@@ -131,6 +131,18 @@
   mixer track box, the name button, the steps (or a miniature roll), and a
   **selection switch** that selects the channel without opening its
   settings (lit for the selected channel).
+- **Activity light** (UI): the inside of the selection switch flashes
+  (`theme::TEXT`) whenever the channel starts a note, during playback, from
+  live input or from a preview, and fades back over a quarter second, so the
+  rack shows at a glance which channels are sounding. A layer's light and
+  the lights of the channels it plays all flash. The engine counts note
+  starts per channel (`Meters::take_notes`); the UI takes the counts once a
+  frame.
+- **Copying notes between channels**: click the source channel's selection
+  switch and press Ctrl+C (over the rack), then click the destination's
+  switch and press Ctrl+V. The paste replaces the destination's notes in the
+  current pattern with the copied ones, as one undo step; Ctrl+X cuts. The
+  channel menu's Cut, Copy and Paste steps do the same.
 - **Mixer track box** (UI): each row shows the mixer track the channel plays
   to as a small number box: "M" for the master track, "3" for insert 3. Drag
   it up or down (or type) to change the track; the tooltip names the track.
@@ -481,6 +493,10 @@ square partials), normalized to a 0.9 peak and faded out at the end.
   design.
 - The solo lock (Shift+click on the mute light) follows the FL Studio online
   manual, "Channel Rack", "12. Mute Control"; the padlock is our own glyph.
+- The activity light inside the selection switch and copying a channel's
+  notes with Ctrl+C / Ctrl+V on the selected channel follow MusicCraft
+  issue #44, which describes the reference's behaviour; the look (a fill
+  that flashes and fades) is our own design (`style/channel-rack.md`).
 - F4 selecting the next empty pattern and offering to name it follows the FL
   Studio online manual, "Keyboard shortcuts" and the pattern selector.
   "Empty" meaning "no notes" and adding a pattern when none is left are our

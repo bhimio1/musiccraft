@@ -612,6 +612,8 @@ impl App {
             status.waiting = meters.is_waiting();
             status.voices = meters.active_voices();
             status.peaks = (0..tracks).map(|t| meters.take_peak(t)).collect();
+            let channels = self.session.project().channels.len();
+            status.notes = (0..channels).map(|c| meters.take_notes(c)).collect();
             status.load = meters.load();
             status.pitches = pitch_readings(self.session.project(), meters);
             // Enough for the spectrum analyser; the toolbar scope uses the end.
@@ -1624,7 +1626,8 @@ impl eframe::App for App {
                 .audio
                 .as_ref()
                 .is_some_and(|a| a.bridge.rendering_preset_preview());
-        let meters_moving = self.ui.meters.iter().any(|(l, r)| *l > 1e-4 || *r > 1e-4);
+        let meters_moving = self.ui.meters.iter().any(|(l, r)| *l > 1e-4 || *r > 1e-4)
+            || self.ui.activity.iter().any(|light| *light > 0.0);
         if busy || meters_moving {
             ctx.request_repaint_after(Duration::from_millis(16));
         } else {

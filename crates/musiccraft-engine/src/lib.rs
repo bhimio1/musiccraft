@@ -26,7 +26,7 @@ pub use graph::{
     TrackParams, Zone,
 };
 pub use message::{EngineMessage, Garbage, LiveEvent, Start};
-pub use meters::{Meters, SCOPE_LEN};
+pub use meters::{ACTIVITY_CHANNELS, Meters, SCOPE_LEN};
 pub use midi_out::{MIDI_OUT_CAPACITY, MidiOutEvent, MidiOutReceiver};
 pub use musiccraft_dsp::PanLaw;
 pub use musiccraft_meter::{Meter, TimeSig};

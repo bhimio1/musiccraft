@@ -154,6 +154,40 @@ fn notes_start_on_the_exact_frame() {
 }
 
 #[test]
+fn note_starts_light_their_channels() {
+    let (mut engine, handle) = impulse_engine();
+    let seq = Sequence::new(vec![note(1, 0), note(3, 0)], 4 * u64::from(PPQ));
+    engine.apply(EngineMessage::SetSequence(Box::new(seq)));
+    engine.apply(EngineMessage::Play);
+    let _ = render_mono(&mut engine, 2 * BEAT);
+    let meters = handle.meters();
+    assert_eq!(meters.take_notes(0), 1);
+    assert_eq!(meters.take_notes(0), 0, "taking resets the count");
+    let _ = render_mono(&mut engine, 2 * BEAT);
+    assert_eq!(meters.take_notes(0), 1);
+    assert_eq!(meters.take_notes(1), 0);
+}
+
+#[test]
+fn live_notes_light_a_layer_and_its_channels() {
+    let (mut engine, handle) = engine_pair(SR);
+    let mut graph = Graph::new();
+    let impulse = Arc::new(SampleBuffer::mono(vec![1.0], f64::from(SR)));
+    graph.add_channel(Instrument::Sampler(Arc::clone(&impulse)), impulse_params());
+    graph.add_channel(Instrument::Sampler(impulse), impulse_params());
+    graph.add_channel(Instrument::Layer(vec![0, 1]), impulse_params());
+    engine.apply(EngineMessage::SetGraph(Box::new(graph)));
+    engine.apply(EngineMessage::NoteOn {
+        channel: 2,
+        key: 60,
+        velocity: 1.0,
+    });
+    let meters = handle.meters();
+    let lit: Vec<u32> = (0..3).map(|c| meters.take_notes(c)).collect();
+    assert_eq!(lit, [1, 1, 1]);
+}
+
+#[test]
 fn sequence_loops_at_its_length() {
     let (mut engine, _handle) = impulse_engine();
     let seq = Sequence::new(vec![note(0, 0)], u64::from(PPQ));

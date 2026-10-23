@@ -5,6 +5,9 @@ use musiccraft_params::{MAX_EFFECT_SLOTS, MAX_MIXER_TRACKS};
 /// Samples kept for the oscilloscope (master output, mono).
 pub const SCOPE_LEN: usize = 2048;
 
+/// Channels whose note starts are counted for the rack's activity lights.
+pub const ACTIVITY_CHANNELS: usize = 512;
+
 /// Values the engine publishes for display: playhead, transport, peak levels,
 /// a short history of the master output and processing load. Shared between
 /// threads through atomics only.
@@ -18,6 +21,8 @@ pub struct Meters {
     scope_write: AtomicUsize,
     load_bits: AtomicU32,
     pitches: Vec<AtomicU32>,
+    /// Notes started per channel since the front end last took them.
+    notes: Vec<AtomicU32>,
     /// Where playback last paused at a pause marker, and how many times it has.
     marker_pause_bits: AtomicU64,
     marker_pauses: AtomicU64,
@@ -51,6 +56,7 @@ impl Meters {
             pitches: (0..MAX_MIXER_TRACKS * MAX_EFFECT_SLOTS)
                 .map(|_| AtomicU32::new(0))
                 .collect(),
+            notes: (0..ACTIVITY_CHANNELS).map(|_| AtomicU32::new(0)).collect(),
             marker_pause_bits: AtomicU64::new(0.0_f64.to_bits()),
             marker_pauses: AtomicU64::new(0),
             counting_in: AtomicBool::new(false),
@@ -166,6 +172,21 @@ impl Meters {
         (take(track * 2), take(track * 2 + 1))
     }
 
+    /// Returns how many notes `channel` started since the last call and
+    /// resets the count.
+    #[must_use]
+    pub fn take_notes(&self, channel: usize) -> u32 {
+        self.notes
+            .get(channel)
+            .map_or(0, |n| n.swap(0, Ordering::Relaxed))
+    }
+
+    pub(crate) fn record_note(&self, channel: u16) {
+        if let Some(count) = self.notes.get(usize::from(channel)) {
+            count.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
     pub(crate) fn publish(&self, position: f64, playing: bool, voices: u32) {
         self.position_bits
             .store(position.to_bits(), Ordering::Relaxed);
@@ -217,6 +238,18 @@ mod tests {
         assert_eq!(meters.take_peak(3), (0.0, 0.0));
         meters.record_peak(MAX_MIXER_TRACKS + 5, 1.0, 1.0);
         assert_eq!(meters.take_peak(MAX_MIXER_TRACKS + 5), (0.0, 0.0));
+    }
+
+    #[test]
+    fn note_starts_are_counted_until_taken() {
+        let meters = Meters::new();
+        meters.record_note(2);
+        meters.record_note(2);
+        assert_eq!(meters.take_notes(2), 2);
+        assert_eq!(meters.take_notes(2), 0);
+        assert_eq!(meters.take_notes(1), 0);
+        meters.record_note(u16::MAX);
+        assert_eq!(meters.take_notes(usize::from(u16::MAX)), 0);
     }
 
     #[test]
