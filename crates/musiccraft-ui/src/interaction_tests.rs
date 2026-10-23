@@ -4766,3 +4766,39 @@ fn file_menu_items_ask_for_the_system_file_dialog() {
         assert!(h.state.dialog.is_none(), "no text prompt for {name}");
     }
 }
+
+#[test]
+fn holding_a_piano_key_sounds_it_once_until_release() {
+    let mut h = Harness::new(&["channel.add_synth"]);
+    h.state.windows.piano_roll = true;
+    h.settle();
+    let (_, clip) = h.state.roll.last_view.expect("piano roll drawn");
+    let key = pos2(clip.left() + 40.0, h.roll_point(0, 60).y);
+    h.other.clear();
+    h.press(key, PointerButton::Primary);
+    for _ in 0..5 {
+        h.frame(vec![]);
+    }
+    let held: Vec<(u8, bool)> = h
+        .other
+        .iter()
+        .filter_map(|a| match a {
+            Action::Preview { key, on, .. } => Some((*key, *on)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(held, [(60, true)], "held key retriggered: {held:?}");
+    assert_eq!(h.state.roll.preview, Some((0, 60)));
+    h.release(key, PointerButton::Primary);
+    h.settle();
+    let all: Vec<(u8, bool)> = h
+        .other
+        .iter()
+        .filter_map(|a| match a {
+            Action::Preview { key, on, .. } => Some((*key, *on)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(all, [(60, true), (60, false)], "{all:?}");
+    assert!(h.state.roll.preview.is_none());
+}
