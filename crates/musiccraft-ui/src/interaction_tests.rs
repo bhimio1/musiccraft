@@ -4991,6 +4991,62 @@ fn right_clicking_a_routing_arrow_sidechains_the_selected_insert() {
         .unwrap();
 }
 
+/// Issue #32: a strip cut off at the right edge of the scrolling strips must
+/// not take clicks on the slot panel beside it.
+#[test]
+fn a_clipped_strip_does_not_take_clicks_on_the_slot_panel() {
+    let mut h = Harness::new(&[]);
+    h.state.windows.mixer = true;
+    h.settle();
+    let mixer = window_rect(&h, "mixer-window");
+    let hovering = |h: &mut Harness, p: Pos2| {
+        h.frame(vec![Event::PointerMoved(p)]);
+        h.frame(vec![]);
+        h.state.hint.as_deref() == Some("Add an effect")
+    };
+    // The first empty slot's name, then its left end; the chevron that
+    // opens the slot menu is just left of it.
+    let row = (0..60)
+        .flat_map(|j| (0..200).map(move |i| (i, j)))
+        .map(|(i, j)| {
+            pos2(
+                mixer.right() - 4.0 - 2.0 * i as f32,
+                mixer.top() + 30.0 + 4.0 * j as f32,
+            )
+        })
+        .find(|p| hovering(&mut h, *p))
+        .expect("an empty slot");
+    let mut left = row.x;
+    while hovering(&mut h, pos2(left - 1.0, row.y)) {
+        left -= 1.0;
+    }
+    let bars = egui::Id::new("mixer-strip-bars");
+    let menu = egui::Id::new(("mixer-slot-menu", 0_usize));
+    // Scrolled so the last visible strip is cut off by the panel.
+    for step in [10.0, 30.0] {
+        crate::scrollbars::plain_step(&h.ctx, bars, vec2(step, 0.0));
+        h.settle();
+        let mut opened = 0;
+        for dx in 1..=24 {
+            let p = pos2(left - dx as f32, row.y);
+            h.state.selected_track = 0;
+            h.state.mixer_selection.clear();
+            h.click(p, PointerButton::Primary);
+            h.settle();
+            if egui::Popup::is_id_open(&h.ctx, menu) {
+                opened += 1;
+                assert_eq!(
+                    h.state.selected_track, 0,
+                    "slot menu click at {p:?} selected a strip"
+                );
+                egui::Popup::close_id(&h.ctx, menu);
+                h.settle();
+            }
+        }
+        assert!(opened > 0, "the slot chevron left of {left}");
+    }
+}
+
 #[test]
 fn right_clicking_a_pattern_offers_split_by_instrument_first() {
     let mut h = Harness::new(&[

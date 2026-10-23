@@ -980,18 +980,20 @@ fn strip(
     // instead of adding a strip-wide click area, which would sit on top of
     // the lights, switches and name and take their clicks and hovers.
     // Clicks on the routing arrow route the selected insert, and clicks in a
-    // menu above the strip belong to the menu: neither selects.
+    // menu above the strip belong to the menu: neither selects. Only the
+    // visible part counts: a strip cut off by the edge of the scrolling
+    // strips still has its full rectangle under the slot panel beside them.
+    let visible = response.response.rect.intersect(ui.clip_rect());
     let click = ui.input(|i| {
         i.pointer
             .interact_pos()
             .filter(|_| i.pointer.primary_clicked())
     });
     let clicked_here = !on_arrow
-        && click.is_some_and(|p| {
-            response.response.rect.contains(p) && ui.ctx().layer_id_at(p) == Some(ui.layer_id())
-        });
+        && click
+            .is_some_and(|p| visible.contains(p) && ui.ctx().layer_id_at(p) == Some(ui.layer_id()));
     let toggling = ui.input(|i| i.modifiers.command && i.modifiers.shift);
-    if clicked_here && ui.is_rect_visible(response.response.rect) && !toggling {
+    if clicked_here && !toggling {
         if is_selected(state, index) {
             make_primary(state, index);
         } else {
