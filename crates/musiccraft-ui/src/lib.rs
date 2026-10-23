@@ -761,6 +761,45 @@ impl UiState {
         }
     }
 
+    /// Forgets everything that points into the project after File → New,
+    /// Open, Recover or an import replaced it: selections, open item windows,
+    /// half-done gestures and caches. Channel, pattern and clip ids start
+    /// over in every project, so stale state would act on the new project's
+    /// items. View preferences (tools, zoom, snap, open windows) stay.
+    pub fn project_replaced(&mut self) {
+        self.selected_channel = 0;
+        self.selected_track = 0;
+        self.mixer_selection.clear();
+        self.mixer_slot = 0;
+        self.meters.clear();
+        self.automation_editor = None;
+        self.automation_ui.forget_project();
+        self.automation_view = None;
+        self.clip_curve = curve::Edit::default();
+        self.rack_rows.clear();
+        self.type_in = None;
+        self.renaming = None;
+        self.dialog = None;
+        self.file_pick = None;
+        self.kept_channels.clear();
+        self.rack_group = None;
+        self.graph_drag = None;
+        self.graph_view = None;
+        self.step_paint = None;
+        self.step_layout.clear();
+        self.plugin_filter.clear();
+        self.effect_windows.clear();
+        self.sample_edit.forget_project();
+        self.effect_graph = None;
+        self.project_name.clear();
+        self.plugin_layout = (None, Vec::new());
+        self.roll.forget_project();
+        self.playlist.forget_project();
+        // Only the open page carries over; sample caches go with the folder.
+        self.antiserum = self.antiserum.clone();
+        self.antiserum.forget_channel();
+    }
+
     /// Starts a new continuous gesture and returns its key.
     pub(crate) fn begin_gesture(&mut self) -> u64 {
         self.gesture += 1;

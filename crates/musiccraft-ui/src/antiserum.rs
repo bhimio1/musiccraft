@@ -18,6 +18,13 @@ pub(crate) struct AntiserumUi {
     channel: Option<ChannelId>,
 }
 
+impl AntiserumUi {
+    /// Shows no channel until one is picked again.
+    pub(crate) fn forget_channel(&mut self) {
+        self.channel = None;
+    }
+}
+
 impl fmt::Debug for AntiserumUi {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AntiserumUi")

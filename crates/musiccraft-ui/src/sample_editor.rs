@@ -35,6 +35,14 @@ impl Default for EditorState {
     }
 }
 
+impl EditorState {
+    /// Drops the selection, which belongs to a channel of the old project.
+    pub(crate) fn forget_project(&mut self) {
+        self.selection = None;
+        self.anchor = None;
+    }
+}
+
 fn edit(channel: usize, operation: &str, extra: &[String]) -> Action {
     let mut args = vec![(channel + 1).to_string(), operation.to_owned()];
     args.extend(extra.iter().cloned());

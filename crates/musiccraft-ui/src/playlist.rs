@@ -175,6 +175,24 @@ impl Default for PlaylistState {
     }
 }
 
+impl PlaylistState {
+    /// Keeps the tool, zoom, snap and view options and drops everything about
+    /// the old project's clips: selections, gestures, the clip clipboard
+    /// (its clips name the old project's patterns) and what the picker paints.
+    pub(crate) fn forget_project(&mut self) {
+        let old = std::mem::take(self);
+        *self = Self {
+            px_per_bar: old.px_per_bar,
+            row_height: old.row_height,
+            snap: old.snap,
+            picker: old.picker,
+            tool: old.tool,
+            view: old.view,
+            ..Self::default()
+        };
+    }
+}
+
 #[cfg(test)]
 fn finish(drag: &ClipDrag) -> Option<Invocation> {
     let o = drag.original;

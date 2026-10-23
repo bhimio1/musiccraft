@@ -89,7 +89,20 @@
 - Closing the window, File → New and File → Open ask whether to save unsaved
   changes first (Save, Don't save, Cancel). "Unsaved" means the project differs
   from what was last saved, loaded or created. Save is the default button,
-  drawn with an accent edge: Enter saves and Esc cancels.
+  drawn with an accent edge: Enter saves and Esc cancels. An FL Studio import
+  asks the same way, since it replaces the project too.
+- Replacing the project (New, Open, Recover, an FL Studio import, from the
+  menu or an assistant) starts the interface afresh on it. Channel, pattern,
+  automation and plugin numbers start over in every project, so nothing from
+  the old project may act on the new one: piano roll, playlist and mixer
+  selections, the playlist's clip clipboard and the automation or audio clip
+  it paints, extra channel windows, effect windows, the channel rack's group
+  filter, the sample editor's selection, the open type-in box or rename field,
+  and any gesture in progress are dropped, and the first channel and the
+  master track are selected. Every running plugin and Antiserum synth stops
+  and the new project's own start with their saved state. View preferences
+  stay: open windows, tools, zoom, snap, view options and the note clipboard
+  (notes paste into any project).
 
 ## Sources
 

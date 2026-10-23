@@ -113,7 +113,9 @@ impl Harness {
             match action {
                 Action::Run(invocation) => {
                     commands.push(invocation.to_string());
-                    self.session.run(&invocation).unwrap();
+                    if self.session.run(&invocation).unwrap().reset_history {
+                        self.state.project_replaced();
+                    }
                 }
                 Action::Coalesced(invocation, key) => {
                     commands.push(invocation.to_string());
@@ -4989,4 +4991,103 @@ fn right_clicking_a_routing_arrow_sidechains_the_selected_insert() {
     h.session
         .run_line("mixer.set_effect_param 1 1 sidechain 3")
         .unwrap();
+}
+
+impl Harness {
+    /// File → New as the app runs it, then `setup` in the new project.
+    fn switch_project(&mut self, setup: &[&str]) {
+        assert!(self.session.run_line("project.new").unwrap().reset_history);
+        self.state.project_replaced();
+        for line in setup {
+            self.session.run_line(line).unwrap();
+        }
+        self.settle();
+    }
+}
+
+#[test]
+fn a_new_project_starts_without_the_old_playlist_selection() {
+    let mut h = Harness::new(&["playlist.add_clip 1 1 0"]);
+    h.state.windows.playlist = true;
+    h.settle();
+    h.click(h.playlist_point(40, 0), PointerButton::Primary);
+    assert_eq!(h.state.playlist.selection.len(), 1);
+    h.key(egui::Key::C, Modifiers::COMMAND);
+
+    // A clip where the old selection was: Delete must leave it alone.
+    h.switch_project(&["playlist.add_clip 1 1 0"]);
+    assert!(h.state.playlist.selection.is_empty());
+    h.frame(vec![Event::PointerMoved(
+        h.playlist_point(10 * TICKS_PER_BAR, 5),
+    )]);
+    assert!(h.key(egui::Key::Delete, Modifiers::NONE).is_empty());
+    assert_eq!(h.session.project().playlist.clips.len(), 1);
+    // A click on the clip still selects it.
+    h.click(h.playlist_point(40, 0), PointerButton::Primary);
+    assert_eq!(h.state.playlist.selection, BTreeSet::from([(0, 0)]));
+}
+
+#[test]
+fn a_new_project_starts_without_the_old_piano_roll_selection() {
+    let mut h = Harness::new(&["channel.add_synth", "note.add 1 0 1 60"]);
+    h.state.windows.piano_roll = true;
+    h.state.roll.tool = crate::piano_roll::Tool::Paint;
+    h.state.roll.px_per_step = 30.0;
+    h.settle();
+    h.hover_roll(10 * TICKS_PER_STEP, 60);
+    h.key(egui::Key::A, Modifiers::COMMAND);
+    assert_eq!(h.state.roll.selection.len(), 1);
+
+    h.switch_project(&["channel.add_synth", "note.add 1 0 1 60"]);
+    assert!(h.state.roll.selection.is_empty());
+    h.hover_roll(10 * TICKS_PER_STEP, 60);
+    assert!(h.key(egui::Key::Delete, Modifiers::NONE).is_empty());
+    assert_eq!(h.roll_notes(), [(0, 60)]);
+    // The tool and zoom are preferences: they stay.
+    assert_eq!(h.state.roll.tool, crate::piano_roll::Tool::Paint);
+    assert!((h.state.roll.px_per_step - 30.0).abs() < f32::EPSILON);
+}
+
+#[test]
+fn a_new_project_forgets_what_pointed_into_the_old_one() {
+    let mut h = Harness::new(&[
+        "channel.add_synth",
+        "channel.add_synth",
+        "channel.add_synth",
+        "mixer.add_effect 2 reverb",
+    ]);
+    h.state.windows.mixer = true;
+    h.state.selected_channel = 2;
+    h.state.selected_track = 2;
+    h.state.mixer_selection.insert(1);
+    h.state.effect_windows.push((2, 0));
+    h.state.rack_group = Some("Drums".to_owned());
+    let channel = h.session.project().channels[1].id;
+    h.state.kept_channels.push((channel, Default::default()));
+    h.state.playlist.paint_audio = Some(channel);
+    h.state.playlist.px_per_bar = 100.0;
+    h.state.automation_ui.pending = Some(0);
+    h.settle();
+
+    h.switch_project(&[
+        "channel.add_synth",
+        "channel.add_synth",
+        "channel.add_synth",
+    ]);
+    let s = &h.state;
+    assert_eq!((s.selected_channel, s.selected_track), (0, 0));
+    assert!(s.mixer_selection.is_empty());
+    assert!(s.effect_windows.is_empty());
+    assert!(s.kept_channels.is_empty());
+    assert_eq!(s.rack_group, None);
+    assert_eq!(s.playlist.paint_audio, None);
+    assert_eq!(s.automation_ui.pending, None);
+    assert!(s.windows.mixer, "open windows stay open");
+    assert!((s.playlist.px_per_bar - 100.0).abs() < f32::EPSILON);
+    // An automation in the new project does not open by itself.
+    h.session
+        .run_line("automation.create mixer:1:volume")
+        .unwrap();
+    h.settle();
+    assert_eq!(h.state.automation_editor, None);
 }

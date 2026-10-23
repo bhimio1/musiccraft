@@ -385,6 +385,10 @@ pub struct Bridge {
     /// Instances that failed to start, by instance number, with their plugin
     /// id; not retried until [`Bridge::retry_plugins`].
     failed: BTreeMap<u32, String>,
+    /// Every running plugin and synth stops, then starts again from the
+    /// project, at the next sync: the project was replaced and its instance
+    /// and channel numbers may repeat the old project's.
+    restart: bool,
     /// The project's transport requests already acted on; `None` before the
     /// first sync.
     requests: Option<Requests>,
@@ -415,6 +419,7 @@ impl Bridge {
             host: None,
             live: BTreeMap::new(),
             failed: BTreeMap::new(),
+            restart: false,
             requests: None,
             harmonics: BTreeMap::new(),
             stereo_harmonics: BTreeMap::new(),
@@ -443,6 +448,16 @@ impl Bridge {
     /// Tries plugins that failed to start again on the next sync (after a
     /// rescan, for example).
     pub fn retry_plugins(&mut self) {
+        self.failed.clear();
+    }
+
+    /// Stops every running plugin and synth at the next sync and starts the
+    /// project's own afresh, with their saved state. Call it when the project
+    /// was replaced (new, open, recover, import): instance and channel numbers
+    /// start over in every project, so the old project's plugins would
+    /// otherwise carry on in the new one's slots.
+    pub fn restart_plugins(&mut self) {
+        self.restart = true;
         self.failed.clear();
     }
 
@@ -475,6 +490,39 @@ impl Bridge {
 
     /// Starts and stops plugin instances so they match the project, then sends
     /// parameter changes.
+    /// Stops every running plugin and synth for [`Bridge::restart_plugins`];
+    /// the restart is over once all of them are gone.
+    fn stop_externals(&mut self, handle: &mut EngineHandle, report: &mut SyncReport) {
+        let slots: Vec<(Option<u32>, Option<ChannelId>, u16)> = self
+            .live
+            .iter()
+            .map(|(k, l)| (Some(*k), None, l.slot))
+            .chain(self.synths.iter().map(|(k, s)| (None, Some(*k), s.slot)))
+            .collect();
+        for (instance, channel, slot) in slots {
+            let message = EngineMessage::SetExternal {
+                slot,
+                external: None,
+            };
+            if handle.send(message).is_err() {
+                report.dropped += 1;
+                continue;
+            }
+            report.messages += 1;
+            if let Some(instance) = instance {
+                self.live.remove(&instance);
+            }
+            if let Some(channel) = channel {
+                self.synths.remove(&channel);
+            }
+        }
+        if self.live.is_empty() && self.synths.is_empty() {
+            self.restart = false;
+            // Everything is sent again for the new project.
+            self.last = None;
+        }
+    }
+
     fn sync_plugins(
         &mut self,
         project: &Project,
@@ -1028,8 +1076,13 @@ impl Bridge {
     pub fn sync(&mut self, project: &Project, handle: &mut EngineHandle) -> SyncReport {
         handle.collect_garbage();
         let mut report = SyncReport::default();
-        self.sync_plugins(project, handle, &mut report);
-        self.sync_synths(project, handle, &mut report);
+        if self.restart {
+            self.stop_externals(handle, &mut report);
+        }
+        if !self.restart {
+            self.sync_plugins(project, handle, &mut report);
+            self.sync_synths(project, handle, &mut report);
+        }
         let slots: BTreeMap<u32, u16> = self.live.iter().map(|(k, l)| (*k, l.slot)).collect();
         let synth_slots: BTreeMap<ChannelId, u16> =
             self.synths.iter().map(|(k, s)| (*k, s.slot)).collect();

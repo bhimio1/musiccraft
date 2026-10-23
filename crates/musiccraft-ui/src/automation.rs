@@ -334,6 +334,19 @@ pub(crate) struct EditorState {
     pub(crate) pending: Option<usize>,
 }
 
+impl EditorState {
+    /// Keeps the editor's options and copied curve; the view, the gesture and
+    /// a waiting "open the new automation" belong to the old project.
+    pub(crate) fn forget_project(&mut self) {
+        let old = std::mem::take(self);
+        *self = Self {
+            options: old.options,
+            clipboard: old.clipboard,
+            ..Self::default()
+        };
+    }
+}
+
 /// Opens an automation created by "Create automation clip" once it exists.
 fn open_pending(state: &mut UiState, project: &Project) {
     if let Some(count) = state.automation_ui.pending
