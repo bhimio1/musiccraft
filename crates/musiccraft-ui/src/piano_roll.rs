@@ -262,6 +262,36 @@ impl Default for RollState {
     }
 }
 
+impl RollState {
+    /// Keeps the tools and the view settings and drops everything about the
+    /// old project's notes: selections, gestures, the open note properties
+    /// and the scroll position (the view centres on the new notes).
+    pub(crate) fn forget_project(&mut self) {
+        let old = std::mem::take(self);
+        *self = Self {
+            tool: old.tool,
+            slide: old.slide,
+            porta: old.porta,
+            color: old.color,
+            px_per_step: old.px_per_step,
+            key_height: old.key_height,
+            snap: old.snap,
+            last_length: old.last_length,
+            velocity: old.velocity,
+            chord: old.chord,
+            scale: old.scale,
+            fit_scale: old.fit_scale,
+            lane_mode: old.lane_mode,
+            key_labels: old.key_labels,
+            ghosts: old.ghosts,
+            note_labels: old.note_labels,
+            lane_height: old.lane_height,
+            lane_shown: old.lane_shown,
+            ..Self::default()
+        };
+    }
+}
+
 fn is_black(key: u8) -> bool {
     matches!(key % 12, 1 | 3 | 6 | 8 | 10)
 }

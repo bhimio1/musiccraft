@@ -2522,6 +2522,29 @@ fn antiserum_edits_reach_the_running_synth() {
 }
 
 #[test]
+fn a_replaced_project_starts_its_synths_afresh() {
+    let mut s = session();
+    run(&mut s, "channel.add_antiserum Glass Reese");
+    let (mut engine, mut handle) = engine_pair(48_000);
+    let mut bridge = Bridge::new(48_000);
+    assert!(bridge.sync(s.project(), &mut handle).rebuilt_graph);
+    let mut out = vec![0.0; 1_024];
+    engine.process(&mut out, 2);
+    // Another project whose synth has the same channel id.
+    run(&mut s, "project.new");
+    run(&mut s, "channel.add_antiserum Choir Pad");
+    bridge.restart_plugins();
+    let restarted = bridge.sync(s.project(), &mut handle);
+    assert!(
+        restarted.rebuilt_graph,
+        "the old synth goes, a new one starts"
+    );
+    assert!(restarted.warnings.is_empty());
+    engine.process(&mut out, 2);
+    assert_eq!(bridge.sync(s.project(), &mut handle).messages, 0, "idle");
+}
+
+#[test]
 fn antiserum_automation_targets_the_synth() {
     let mut s = session();
     run(

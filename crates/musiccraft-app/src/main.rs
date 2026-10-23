@@ -154,7 +154,10 @@ fn unsaved_key(ctx: &egui::Context) -> Option<UnsavedChoice> {
 
 /// Commands that replace the open project, losing unsaved changes.
 fn replaces_project(name: &str) -> bool {
-    matches!(name, "project.new" | "project.load" | "project.recover")
+    matches!(
+        name,
+        "project.new" | "project.load" | "project.recover" | "project.import_flp"
+    )
 }
 
 /// Commands after which the project matches a file (or a fresh start).
@@ -1348,7 +1351,24 @@ impl App {
         if result.is_ok() && marks_saved(&invocation.name) {
             self.saved_json = self.session.project().to_json().ok();
         }
+        if result.as_ref().is_ok_and(|outcome| outcome.reset_history) {
+            self.project_replaced();
+        }
         result
+    }
+
+    /// After New, Open, Recover or an import: nothing that pointed into the
+    /// old project may act on the new one, whose ids start over.
+    fn project_replaced(&mut self) {
+        self.ui.project_replaced();
+        self.overview = None;
+        self.clip_audio.clear();
+        self.recorder.clear();
+        self.sweep.reset();
+        self.steps = recorder::StepEntry::default();
+        if let Some(audio) = &mut self.audio {
+            audio.bridge.restart_plugins();
+        }
     }
 
     /// Whether the project differs from what was last saved, loaded or created.
