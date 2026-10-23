@@ -226,7 +226,7 @@ const TOOLS: [(Tool, Icon, &str); 8] = [
     (
         Tool::Slice,
         Icon::Slice,
-        "Slice (C): click a clip to cut it in two there",
+        "Slice (C): click a clip to cut it in two there; Shift+click splits a pattern clip into two new patterns",
     ),
     (
         Tool::Select,
@@ -1020,6 +1020,22 @@ fn pattern_section(
                             if ui.button("Clone").clicked() {
                                 actions.push(Action::Run(Invocation::new(
                                     "pattern.clone",
+                                    [(i + 1).to_string()],
+                                )));
+                                ui.close();
+                            }
+                            if crate::widgets::add_enabled(
+                                ui,
+                                splittable(pattern),
+                                egui::Button::new("Split by channel"),
+                            )
+                            .on_hover_text(
+                                "One pattern per channel, with clips stacked where this one's were",
+                            )
+                            .clicked()
+                            {
+                                actions.push(Action::Run(Invocation::new(
+                                    "pattern.split_by_channel",
                                     [(i + 1).to_string()],
                                 )));
                                 ui.close();
@@ -3214,6 +3230,50 @@ pub(crate) fn slice_at(clips: &[Clip], at: u32) -> Option<Invocation> {
     )
 }
 
+/// Splits every pattern clip that crosses `at` into two new patterns there.
+pub(crate) fn split_at(clips: &[Clip], at: u32) -> Option<Invocation> {
+    batch(
+        clips
+            .iter()
+            .filter(|c| matches!(c.source, ClipSource::Pattern(_)))
+            .filter(|c| c.start < at && at < c.end())
+            .map(|c| {
+                Invocation::new(
+                    "playlist.split_clip",
+                    [(c.track + 1).to_string(), format!("{at}t")],
+                )
+            })
+            .collect(),
+    )
+}
+
+/// Splits the patterns of the selected clips by channel, each pattern once.
+fn split_by_channel(project: &Project, clips: &[Clip]) -> Option<Invocation> {
+    let mut numbers: Vec<usize> = clips
+        .iter()
+        .filter_map(Clip::pattern)
+        .filter_map(|id| project.pattern_position(id))
+        .filter(|&i| splittable(&project.patterns[i]))
+        .collect();
+    numbers.sort_unstable();
+    numbers.dedup();
+    // Each split appends its patterns, so the numbers stay valid.
+    batch(
+        numbers
+            .iter()
+            .map(|i| Invocation::new("pattern.split_by_channel", [(i + 1).to_string()]))
+            .collect(),
+    )
+}
+
+/// Whether a pattern has notes on two or more channels.
+pub(crate) fn splittable(pattern: &musiccraft_project::Pattern) -> bool {
+    let mut channels = pattern.notes.iter().map(|n| n.channel);
+    channels
+        .next()
+        .is_some_and(|first| channels.any(|c| c != first))
+}
+
 /// Merges the selected pattern clips (two or more) into one.
 pub(crate) fn merge(clips: &[Clip]) -> Option<Invocation> {
     let patterns: Vec<&Clip> = clips
@@ -3269,6 +3329,20 @@ fn clip_menu(ui: &mut egui::Ui, state: &mut UiState, frame: &Frame<'_>, actions:
         "Slice at playhead",
         "Cut the selected clips where the playhead is (or use the slice tool)",
         slice_at(&selected, playhead),
+    );
+    menu_item(
+        ui,
+        actions,
+        "Split at playhead into new patterns",
+        "Cut the selected pattern clips where the playhead is; each piece gets a new pattern holding only what it plays (or Shift+click with the slice tool)",
+        split_at(&selected, playhead),
+    );
+    menu_item(
+        ui,
+        actions,
+        "Split by channel",
+        "Make one pattern per channel for the selected clips' patterns, with their clips stacked on the tracks below",
+        split_by_channel(project, &selected),
     );
     menu_item(
         ui,
@@ -3552,7 +3626,10 @@ fn tool_stroke(
                     } else {
                         tick.max(0.0) as u32
                     };
-                    actions.extend(slice_at(&[c], at).map(Action::Run));
+                    let split = ui.input(|i| i.modifiers.shift)
+                        && matches!(c.source, ClipSource::Pattern(_));
+                    let cut = if split { split_at } else { slice_at };
+                    actions.extend(cut(&[c], at).map(Action::Run));
                 }
                 (Tool::Play, _) => {
                     let at = state.playlist.snap.floor(tick, &state.playlist.meter);
@@ -4374,6 +4451,41 @@ mod tests {
         assert_eq!(
             merge(&clips).unwrap().to_string(),
             "playlist.merge_clips 1 0t 2 384t"
+        );
+    }
+
+    #[test]
+    fn splitting_needs_pattern_clips_and_two_channels() {
+        use musiccraft_project::{ChannelId, Note, NoteProps};
+        let mut audio = pattern_clip(2, 0, 384);
+        audio.source = ClipSource::Audio(ChannelId(9));
+        let clips = [pattern_clip(0, 0, 384), audio];
+        assert_eq!(
+            split_at(&clips, 192).unwrap().to_string(),
+            "playlist.split_clip 1 192t"
+        );
+        let mut project = Project::default();
+        let id = project.patterns[0].id;
+        let clips = [Clip {
+            source: ClipSource::Pattern(id),
+            ..clips[0]
+        }];
+        let note = |channel| Note {
+            channel: ChannelId(channel),
+            start: 0,
+            length: 24,
+            key: 60,
+            velocity: 100,
+            pan: 0,
+            slide: false,
+            props: NoteProps::default(),
+        };
+        project.patterns[0].notes = vec![note(1), note(1)];
+        assert!(split_by_channel(&project, &clips).is_none(), "one channel");
+        project.patterns[0].notes.push(note(2));
+        assert_eq!(
+            split_by_channel(&project, &clips).unwrap().to_string(),
+            "pattern.split_by_channel 1"
         );
     }
 

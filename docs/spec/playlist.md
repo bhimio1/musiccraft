@@ -167,6 +167,28 @@
   and undo keeps it; project files store it only when it is not 0.
 - `playlist.slice_clip <track> <at>` cuts the clip covering `at` into two clips
   there (the second keeps playing where the first stopped).
+- `playlist.split_clip <track> <at>` cuts a pattern clip in two at `at` and
+  gives each piece a new pattern of its own holding only what that piece
+  plays, from the piece's start (offset 0): notes starting before the piece
+  are dropped, notes running past its end are shortened, and repeats of a
+  pattern shorter than the clip are written out. Pattern automation lanes are
+  cut the same way; a lane gets a point at the piece's start holding the value
+  of the last point before it. The pieces are named "<name> #2", "#3", … and
+  are as long as the piece (in whole steps, at least one); the original
+  pattern stays in the list for its other clips. One undo step. Fails for
+  audio and automation clips (slice those) and for a piece longer than 1024
+  steps.
+- `pattern.split_by_channel <pattern>` makes one new pattern per channel the
+  pattern plays, in rack order, named "<name> - <channel>", each holding that
+  channel's notes and pattern automation lanes; lanes not aimed at one of
+  those channels (mixer targets) go with the first. Length, time signature
+  and colour are copied. Every playlist clip of the pattern is replaced by
+  one clip per new pattern at the same start, length and offset (muted
+  clips stay muted): the first on the clip's own track, the others on the
+  following tracks, each skipping down past tracks where it would overlap
+  another clip. The original pattern stays in the list; the first new
+  pattern is selected. One undo step. Fails for a pattern with notes on
+  fewer than two channels, or when the clips would not fit on the 64 tracks.
 - `playlist.make_unique <track> <at>` gives the clip its own copy of its
   pattern, automation or sample channel, named "<name> #2" (#3, …); other
   clips keep the original.
@@ -192,7 +214,10 @@
   stretch: clips inside it go, clips across its edges are cut back, and later
   clips and markers move earlier. Both are one undo step.
 - UI: the playlist's window menu → Clip acts on the selected clips (Slice at
-  playhead, Make independent copy, Merge, Consolidate, Reverse, fades), and
+  playhead, Split at playhead into new patterns, Split by channel (the
+  selected clips' patterns), Make independent copy, Merge, Consolidate,
+  Reverse, fades; the pattern list's right-click menu and the toolbar's
+  Patterns menu have Split by channel too), and
   window menu → Edit → Insert time / Remove time inserts or removes the loop
   region's time; Ctrl+Insert and Ctrl+Delete do the same (they need a loop
   region: Shift+drag the ruler).
@@ -347,7 +372,8 @@ clip editor window").
   Delete (click or drag over clips; one undo step) and Select (box select),
   plus Mute (click a clip to mute or unmute it: `playlist.toggle_clip_mute
   <track> <at>`, undoable; a muted clip stays, drawn faint, and does not
-  play), Slice (click a clip to cut it at the snapped click), Play (click
+  play), Slice (click a clip to cut it at the snapped click; Shift+click
+  splits a pattern clip into two new patterns, `playlist.split_clip`), Play (click
   moves the playhead there and plays) and Zoom (click zooms in, Shift+click
   out). Keys P, B, D, E, T, C, Y, Z pick them.
 - The **song play button** (after the tools) plays the song from the
@@ -484,6 +510,11 @@ clip editor window").
   and delete space with Ctrl+Insert / Ctrl+Delete) follows the playlist clip
   menu and shortcuts in the FL Studio online manual, "Playlist" and "Keyboard
   shortcuts". The offset model, naming and file layout are our own.
+- Splitting a clip into new patterns and splitting a pattern by channel: the
+  owner's request (2026-10-23), compared with the "Split by channel" pattern
+  option in the FL Studio online manual ("Channel Rack" and "Playlist" pattern
+  menus). Baking the pieces, the track placement, names and Shift+click on the
+  slice tool are our own.
 - Per-track arming for audio recording and input device selection follow the
   FL Studio online manual, "Recording" (arming and input selection). Arming
   playlist rows (rather than mixer tracks) is our own simplification.

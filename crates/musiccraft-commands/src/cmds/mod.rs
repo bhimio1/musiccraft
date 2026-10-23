@@ -12,6 +12,7 @@ mod note_gen;
 mod note_tools;
 mod notes;
 mod pattern;
+mod pattern_split;
 mod playlist;
 mod plugin;
 mod project;
@@ -43,6 +44,7 @@ pub(crate) fn all() -> Vec<Box<dyn Command>> {
     commands.extend(rack::commands());
     commands.extend(playlist::commands());
     commands.extend(clip_edit::commands());
+    commands.extend(pattern_split::commands());
     commands.extend(automation::commands());
     commands.extend(control::commands());
     commands.extend(controller::commands());
