@@ -200,6 +200,15 @@ fn track_params(track: &MixerTrack, index: usize, audible: Option<&[bool]>) -> T
         };
         params.send_count += 1;
     }
+    let routes = track
+        .sidechain_to
+        .iter()
+        .filter(|&&t| t != index && index > 0)
+        .take(MAX_SENDS);
+    for (slot, &target) in params.sidechain_to.iter_mut().zip(routes) {
+        *slot = u16::try_from(target).unwrap_or(u16::MAX);
+        params.sidechain_count += 1;
+    }
     params
 }
 

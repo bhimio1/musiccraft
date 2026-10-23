@@ -146,6 +146,12 @@ pub(super) fn commands() -> Vec<Box<dyn Command>> {
             route_to_master,
         ),
         cmd(
+            "mixer.sidechain_to",
+            "mixer.sidechain_to <source insert> <target track> <on|off>",
+            "Route an insert to another track as a sidechain key (not heard there).",
+            sidechain_to,
+        ),
+        cmd(
             "mixer.add_effect",
             "mixer.add_effect <track> <kind>",
             "Append an effect (filter, eq, delay, reverb, compressor, distortion).",
@@ -219,6 +225,55 @@ fn sidechains(project: &Project) -> Vec<(usize, usize, usize, usize)> {
     out
 }
 
+/// The inserts a track's send effects and band splitters feed.
+fn effect_targets(track: &MixerTrack) -> impl Iterator<Item = usize> + '_ {
+    track.effects.iter().flat_map(|effect| {
+        (0..effect.kind.params().len())
+            .filter(|&i| effect.kind.is_send_target(i))
+            .map(|i| effect.values.get(i).copied().unwrap_or(0.0).round() as usize)
+    })
+}
+
+/// Tracks that track `from` feeds directly: its sends, its send effects'
+/// targets and its sidechain routes (the master is left out; it runs last).
+fn feeds_directly(project: &Project, from: usize) -> Vec<usize> {
+    let Some(track) = project.mixer.get(from).filter(|_| from > 0) else {
+        return Vec::new();
+    };
+    track
+        .sends
+        .iter()
+        .map(|send| send.target)
+        .chain(effect_targets(track))
+        .chain(track.sidechain_to.iter().copied())
+        .filter(|&t| t > 0)
+        .collect()
+}
+
+/// Whether audio or a sidechain key flows from track `from` to track `to`,
+/// directly or through other inserts.
+fn feeds(project: &Project, from: usize, to: usize) -> bool {
+    let mut seen = vec![false; project.mixer.len()];
+    let mut stack = vec![from];
+    while let Some(track) = stack.pop() {
+        if track == to {
+            return true;
+        }
+        if std::mem::replace(seen.get_mut(track).unwrap_or(&mut true), true) {
+            continue;
+        }
+        stack.extend(feeds_directly(project, track));
+    }
+    false
+}
+
+/// The error for a connection from `from` to `to` that would close a loop.
+fn loop_error(args: &Args<'_>, from: usize, to: usize) -> CommandError {
+    args.invalid(format!(
+        "track {to} already feeds track {from} (through sends or sidechains), so this would make a loop"
+    ))
+}
+
 /// Effects that follow a channel, as (track, slot, parameter index, rack
 /// position counted from 1).
 pub(super) fn channel_followers(project: &Project) -> Vec<(usize, usize, usize, usize)> {
@@ -289,6 +344,7 @@ fn move_track(project: &mut Project, args: &Args<'_>) -> Result<Outcome, Command
         .sends
         .iter()
         .any(|send| send.target == high)
+        || effect_targets(&project.mixer[low]).any(|t| t == high)
     {
         return Err(args.invalid(format!(
             "insert {low} sends to insert {high}; sends must go to a higher number, so remove it first"
@@ -307,6 +363,10 @@ fn move_track(project: &mut Project, args: &Args<'_>) -> Result<Outcome, Command
             send.target = swap(send.target);
         }
         track.sends.sort_by_key(|send| send.target);
+        for target in &mut track.sidechain_to {
+            *target = swap(*target);
+        }
+        track.sidechain_to.sort_unstable();
     }
     for (t, s, i, source) in sidechains(project) {
         project.mixer[t].effects[s].values[i] = swap(source) as f32;
@@ -376,6 +436,9 @@ struct TrackSnapshot {
     /// Sends from other (lower) tracks into this one: (source track, level).
     #[serde(default)]
     incoming: Vec<(usize, f32)>,
+    /// Inserts routed to this one as a sidechain.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    keyed_by: Vec<usize>,
 }
 
 fn remove_track(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
@@ -410,6 +473,18 @@ fn remove_track(project: &mut Project, args: &Args<'_>) -> Result<Outcome, Comma
             }
         }
     }
+    let mut keyed_by = Vec::new();
+    for (source, other) in project.mixer.iter_mut().enumerate() {
+        if other.sidechain_to.contains(&index) {
+            keyed_by.push(source);
+        }
+        other.sidechain_to.retain(|&t| t != index);
+        for target in &mut other.sidechain_to {
+            if *target > index {
+                *target -= 1;
+            }
+        }
+    }
     let mut routed = Vec::new();
     for channel in &mut project.channels {
         if channel.mixer_track == index {
@@ -424,6 +499,7 @@ fn remove_track(project: &mut Project, args: &Args<'_>) -> Result<Outcome, Comma
         track,
         routed,
         incoming,
+        keyed_by,
     })
     .map_err(|e| args.invalid(e.to_string()))?;
     Ok(Outcome::undoable(
@@ -474,6 +550,11 @@ fn set_track(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandE
     {
         return Err(args.invalid("sends must go to existing higher-numbered tracks"));
     }
+    if index == 0 && !track.sidechain_to.is_empty()
+        || track.sidechain_to.iter().any(|&t| t == index || t >= len)
+    {
+        return Err(args.invalid("sidechain routes must go to other existing tracks"));
+    }
     if track.effects.len() > MAX_EFFECT_SLOTS {
         return Err(args.invalid(format!("a track holds at most {MAX_EFFECT_SLOTS} effects")));
     }
@@ -509,6 +590,19 @@ fn insert_track(project: &mut Project, args: &Args<'_>) -> Result<Outcome, Comma
             if send.target >= index {
                 send.target += 1;
             }
+        }
+    }
+    for other in &mut project.mixer {
+        for target in &mut other.sidechain_to {
+            if *target >= index {
+                *target += 1;
+            }
+        }
+    }
+    for source in &snapshot.keyed_by {
+        if let Some(other) = project.mixer.get_mut(*source) {
+            other.sidechain_to.push(index);
+            other.sidechain_to.sort_unstable();
         }
     }
     for (source, level) in &snapshot.incoming {
@@ -899,14 +993,13 @@ fn set_effect_param(project: &mut Project, args: &Args<'_>) -> Result<Outcome, C
     let index = track_arg(project, args, 0)?;
     let slot = slot_arg(project, args, index, 1)?;
     let project_tracks = project.mixer.len();
-    let effect = &mut project.mixer[index].effects[slot];
-    let specs = effect.kind.params();
+    let kind = project.mixer[index].effects[slot].kind;
+    let specs = kind.params();
     let name = args.str(2)?;
     let param = index_of(specs, name).ok_or_else(|| {
         let names: Vec<_> = specs.iter().map(|p| p.name).collect();
         args.invalid(format!(
-            "{} has no parameter `{name}`; choose from {}",
-            effect.kind,
+            "{kind} has no parameter `{name}`; choose from {}",
             names.join(", ")
         ))
     })?;
@@ -922,21 +1015,28 @@ fn set_effect_param(project: &mut Project, args: &Args<'_>) -> Result<Outcome, C
         .into());
     }
     let value = spec.sanitize(value);
-    if effect.kind.sidechain_index() == Some(param) && value >= 0.5 {
+    if kind.sidechain_index() == Some(param) && value >= 0.5 {
         let source = value as usize;
-        let valid = source < project_tracks && source != index && (index == 0 || source < index);
-        if !valid {
-            return Err(args.invalid(
-                "a sidechain comes from a lower-numbered insert (or any insert for the master)",
-            ));
+        if source >= project_tracks || source == index {
+            return Err(args.invalid("a sidechain comes from another existing insert"));
+        }
+        if !project.mixer[source].sidechain_to.contains(&index) {
+            return Err(args.invalid(format!(
+                "insert {source} is not routed to track {index} as a sidechain; \
+                 add it first (mixer.sidechain_to {source} {index} on)"
+            )));
         }
     }
-    if effect.kind.is_send_target(param) && value >= 0.5 {
+    if kind.is_send_target(param) && value >= 0.5 {
         let target = value as usize;
         if index == 0 || target <= index || target >= project_tracks {
             return Err(args.invalid("a send effect feeds a higher-numbered insert"));
         }
+        if feeds(project, target, index) {
+            return Err(loop_error(args, index, target));
+        }
     }
+    let effect = &mut project.mixer[index].effects[slot];
     let previous = std::mem::replace(&mut effect.values[param], value);
     let message = format!("{} {name} {}", effect.kind, num(value));
     if previous == value {
@@ -1086,6 +1186,9 @@ fn set_send(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandEr
         return Err(args.invalid("sends go to a higher-numbered insert"));
     }
     let level = check_volume(args.f32(2, "level")?)?;
+    if level > 0.0 && feeds(project, target, index) {
+        return Err(loop_error(args, index, target));
+    }
     let sends = &mut project.mixer[index].sends;
     let previous = sends
         .iter()
@@ -1112,6 +1215,48 @@ fn set_send(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandEr
         Invocation::new(
             args.name(),
             [index.to_string(), target.to_string(), num(previous)],
+        ),
+    ))
+}
+
+fn sidechain_to(project: &mut Project, args: &Args<'_>) -> Result<Outcome, CommandError> {
+    args.expect(3, 3)?;
+    let source = insert_arg(project, args, 0)?;
+    let target = track_arg(project, args, 1)?;
+    let on = args.flag(2)?;
+    if target == source {
+        return Err(args.invalid("a track cannot key itself"));
+    }
+    let routed = project.mixer[source].sidechain_to.contains(&target);
+    let message = if on {
+        format!("insert {source} sidechained to track {target}")
+    } else {
+        format!("insert {source} no longer sidechained to track {target}")
+    };
+    if routed == on {
+        return Ok(Outcome::done(message));
+    }
+    if on {
+        if project.mixer[source].sidechain_to.len() >= MAX_SENDS {
+            return Err(args.invalid(format!(
+                "an insert has at most {MAX_SENDS} sidechain routes"
+            )));
+        }
+        if target > 0 && feeds(project, target, source) {
+            return Err(loop_error(args, source, target));
+        }
+    }
+    let to = &mut project.mixer[source].sidechain_to;
+    to.retain(|&t| t != target);
+    if on {
+        to.push(target);
+        to.sort_unstable();
+    }
+    Ok(Outcome::undoable(
+        message,
+        Invocation::new(
+            args.name(),
+            [source.to_string(), target.to_string(), flag_text(!on)],
         ),
     ))
 }

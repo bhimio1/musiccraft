@@ -688,6 +688,8 @@ struct ProbeLog {
     note_offs: std::sync::atomic::AtomicU32,
     all_off: std::sync::atomic::AtomicU32,
     stopped: std::sync::atomic::AtomicBool,
+    /// Bits of the loudest sidechain sample seen, 0 if never keyed.
+    key_peak: std::sync::atomic::AtomicU32,
 }
 
 /// A fake plugin: as an instrument it writes a 1.0 impulse on the frame each
@@ -735,6 +737,18 @@ impl External for Probe {
         if id == 7 {
             self.gain = value as f32;
         }
+    }
+
+    fn sidechain(&mut self, left: &[f32], right: &[f32]) {
+        use std::sync::atomic::Ordering;
+        let peak = left
+            .iter()
+            .chain(right)
+            .fold(0.0_f32, |m, s| m.max(s.abs()));
+        let seen = f32::from_bits(self.log.key_peak.load(Ordering::Relaxed));
+        self.log
+            .key_peak
+            .store(seen.max(peak).to_bits(), Ordering::Relaxed);
     }
 
     fn process(&mut self, left: &mut [f32], right: &mut [f32], _transport: &ExternalTransport) {
@@ -845,6 +859,100 @@ fn plugin_effects_process_their_track_and_take_parameters() {
     });
     let out = render_mono(&mut engine, 10);
     assert!((out[0] - 0.5).abs() < 1e-6, "got {}", out[0]);
+}
+
+/// The loudest key a plugin effect on the master sees, with an impulse on
+/// insert 1 (kept off the master) named as its sidechain and, if `routed`,
+/// routed to the master as one.
+fn plugin_key_peak(routed: bool) -> f32 {
+    use std::sync::atomic::Ordering;
+    let (mut engine, _handle) = impulse_engine();
+    let (probe, log) = Probe::new();
+    engine.apply(EngineMessage::SetExternal {
+        slot: 0,
+        external: Some(Box::new(probe)),
+    });
+    let mut graph = Graph::new();
+    let impulse = Arc::new(SampleBuffer::mono(vec![1.0], f64::from(SR)));
+    graph.add_channel(
+        Instrument::Sampler(impulse),
+        ChannelParams {
+            track: 1,
+            ..impulse_params()
+        },
+    );
+    let mut values = [0.0; musiccraft_params::MAX_EFFECT_PARAMS];
+    values[EffectKind::Plugin.sidechain_index().unwrap()] = 1.0;
+    graph.set_master(
+        TrackParams::default(),
+        vec![(
+            Effect::new(EffectKind::Plugin, SR as f32),
+            EffectParams {
+                enabled: true,
+                values,
+                mix: 1.0,
+            },
+        )],
+    );
+    let mut insert = TrackParams {
+        to_master: false,
+        ..TrackParams::default()
+    };
+    if routed {
+        insert.sidechain_to[0] = 0;
+        insert.sidechain_count = 1;
+    }
+    graph.add_track(insert, Vec::new());
+    assert!(graph.attach_external(0, 0, 0));
+    engine.apply(EngineMessage::SetGraph(Box::new(graph)));
+    engine.apply(EngineMessage::NoteOn {
+        channel: 0,
+        key: 60,
+        velocity: 1.0,
+    });
+    let out = render_mono(&mut engine, 64);
+    assert!(out.iter().all(|s| *s == 0.0), "the key is not heard");
+    f32::from_bits(log.key_peak.load(Ordering::Relaxed))
+}
+
+#[test]
+fn plugin_effects_get_their_routed_sidechain() {
+    assert!(plugin_key_peak(true) > 0.1);
+    assert!(plugin_key_peak(false).abs() < f32::EPSILON);
+}
+
+#[test]
+fn inserts_run_after_the_inserts_that_feed_or_key_them() {
+    let mut graph = Graph::new();
+    for _ in 0..5 {
+        graph.add_track(TrackParams::default(), Vec::new());
+    }
+    let order = |graph: &mut Graph| {
+        let Graph {
+            tracks, schedule, ..
+        } = graph;
+        schedule.build(tracks);
+        schedule.order.clone()
+    };
+    assert_eq!(order(&mut graph), [1, 2, 3, 4, 5]);
+    // 4 keys 2 and 1 sends to 4, so 1 runs before 4 and 4 before 2.
+    graph.tracks[4].params.sidechain_to[0] = 2;
+    graph.tracks[4].params.sidechain_count = 1;
+    graph.tracks[1].params.sends[0] = SendParams {
+        target: 4,
+        level: 1.0,
+    };
+    graph.tracks[1].params.send_count = 1;
+    assert_eq!(order(&mut graph), [1, 3, 4, 2, 5]);
+    // A loop (refused by commands) still runs every insert once.
+    graph.tracks[2].params.sends[0] = SendParams {
+        target: 4,
+        level: 1.0,
+    };
+    graph.tracks[2].params.send_count = 1;
+    let mut looped = order(&mut graph);
+    looped.sort_unstable();
+    assert_eq!(looped, [1, 2, 3, 4, 5]);
 }
 
 #[test]

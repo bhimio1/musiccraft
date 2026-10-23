@@ -457,3 +457,23 @@ fn mixer_solo_keeps_the_tracks_a_soloed_track_feeds_and_is_fed_by() {
     assert!(!audible[2], "silenced by solo");
     assert!(audible[3]);
 }
+
+#[test]
+fn older_files_get_routes_for_their_sidechains() {
+    let mut project = Project::default();
+    let mut compressor = EffectSlot::new(EffectKind::Compressor);
+    let index = EffectKind::Compressor.sidechain_index().unwrap();
+    compressor.values[index] = 5.0;
+    project.mixer[2].effects.push(compressor);
+    project.mixer[3].sidechain_to = vec![3, 99, 1, 1];
+    let json = project.to_json().unwrap();
+    // A file from before routes existed: no flag, so routes are added.
+    let old = json.replace("\"sidechain_routes\": true,", "");
+    assert_ne!(old, json);
+    let loaded = Project::from_json(&old).unwrap();
+    assert_eq!(loaded.mixer[5].sidechain_to, vec![2]);
+    assert_eq!(loaded.mixer[3].sidechain_to, vec![1], "bad routes dropped");
+    // Newer files keep a removed route removed.
+    let loaded = Project::from_json(&json).unwrap();
+    assert!(loaded.mixer[5].sidechain_to.is_empty());
+}

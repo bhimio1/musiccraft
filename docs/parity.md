@@ -86,6 +86,8 @@ of contents; see `docs/clean-room.md`.
 | Mixer | Peak meters | `done` |
 | Mixer | Sends between inserts and buses | `cmd:mixer.set_send` `cmd:mixer.route_to_master` |
 | Mixer | Sidechain compression | `fx:compressor` `done` |
+| Mixer | "Sidechain to this track" routes (key only, not heard), in either direction | `cmd:mixer.sidechain_to` `spec:mixer.md` |
+| Mixer | Sidechain input for hosted plugin effects | `cmd:mixer.set_effect_param` `spec:plugins.md` |
 | Effects | Filter, EQ, delay, reverb, compressor, distortion | `fx:filter` `fx:eq` `fx:delay` `fx:reverb` `fx:compressor` `fx:distortion` |
 | Effects | Chorus | `fx:chorus` |
 | Effects | Limiter | `fx:limiter` |

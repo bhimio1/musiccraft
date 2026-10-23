@@ -21,8 +21,12 @@
   (envelope, filter…) do not apply.
 - **Effects**: `mixer.add_plugin <track> <plugin-id> [name]` appends a plugin
   effect slot. It takes the slot's place in the chain, stereo in and out.
-  Bypass, removal, moving and undo work as for built-in effects. Plugin effects
-  have no sidechain input.
+  Bypass, removal, moving and undo work as for built-in effects. A plugin
+  effect's `sidechain` setting (`mixer.set_effect_param <track> <slot>
+  sidechain <n>`, 0 = off) feeds track `n`'s post-fader output, which must be
+  routed to the slot's track as a sidechain (`docs/spec/mixer.md`,
+  *Sidechain*), to the plugin's first auxiliary input (CLAP aux port, VST3
+  aux bus). Without one the aux input is silent.
 - **Parameters**: a plugin's parameters are identified by their CLAP parameter
   id and use the plugin's own ("plain") values.
   `channel.set_plugin_param <channel> <param-id> <value>` and

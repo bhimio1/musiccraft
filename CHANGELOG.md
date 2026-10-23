@@ -5,6 +5,22 @@ commit; this file says what they add up to.
 
 ## Unreleased (since 0.3.0)
 
+### Sidechaining as in FL Studio
+
+- Select an insert, right-click another track's routing arrow and choose
+  **Sidechain to this track** (`mixer.sidechain_to`). The route carries the
+  insert's sound to that track's sidechain inputs only, and its arrow is
+  drawn dashed. Then pick the insert in the compressor's, vocoder's or a
+  plugin's **Sidechain** drop-down, which lists the tracks routed there.
+- Any insert can key any other: the mixer runs inserts in the order their
+  routing needs, so a kick on insert 9 can duck a bass on insert 2 without
+  latency. Routes that would form a loop are refused.
+- Hosted CLAP and VST3 effects now get a sidechain signal on their first
+  auxiliary input; before, they had none.
+- Clicking a routing arrow or a mixer menu no longer selects the strip
+  under it.
+- Older projects load with a route added for every sidechain they use.
+
 ### A more compact interface
 
 - The toolbar is one band in a wide window: menus over the hint bar, then

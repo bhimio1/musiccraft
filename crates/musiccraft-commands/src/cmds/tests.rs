@@ -136,6 +136,9 @@ const SCRIPT: &[&str] = &[
     "mixer.set_send 3 4 1",
     "mixer.set_send 1 4 0.3",
     "mixer.route_to_master 1 off",
+    "mixer.sidechain_to 4 0 on",
+    "mixer.set_effect_param 0 1 sidechain 4",
+    "mixer.sidechain_to 4 0 off",
     "playlist.add_clip 1 1 0",
     "playlist.add_clip 2 1 1",
     "playlist.add_clip 3 2 0 4",
@@ -227,6 +230,8 @@ const PLUGIN_SCRIPT: &[&str] = &[
     "mixer.add_plugin 0 com.example.verb Big Verb",
     "mixer.add_effect 0 delay",
     "mixer.set_plugin_param 0 1 3 0.75",
+    "mixer.sidechain_to 2 0 on",
+    "mixer.set_effect_param 0 1 sidechain 2",
     "mixer.move_effect 0 1 2",
     "mixer.remove_effect 0 2",
     "note.add 2 0 1 C4",
@@ -1789,8 +1794,14 @@ fn sidechain_sources_are_validated_and_renumbered() {
     let mut s = session();
     run(&mut s, "mixer.add_effect 3 compressor");
     fails(&mut s, "mixer.set_effect_param 3 1 sidechain 3");
-    fails(&mut s, "mixer.set_effect_param 3 1 sidechain 5");
     fails(&mut s, "mixer.set_effect_param 3 1 sidechain 99");
+    // FL Studio style: the source must be routed as a sidechain first.
+    let err = fails(&mut s, "mixer.set_effect_param 3 1 sidechain 2");
+    assert!(
+        err.to_string().contains("mixer.sidechain_to 2 3 on"),
+        "{err}"
+    );
+    run(&mut s, "mixer.sidechain_to 2 3 on");
     run(&mut s, "mixer.set_effect_param 3 1 sidechain 2");
     fails(&mut s, "mixer.remove_track 2");
     run(&mut s, "mixer.remove_track 1");
@@ -1799,8 +1810,64 @@ fn sidechain_sources_are_validated_and_renumbered() {
         (value - 1.0).abs() < f32::EPSILON,
         "source followed the renumbering: {value}"
     );
+    assert_eq!(s.project().mixer[1].sidechain_to, vec![2]);
     run(&mut s, "edit.undo");
     assert!((s.project().mixer[3].effects[0].values[5] - 2.0).abs() < f32::EPSILON);
+    assert_eq!(s.project().mixer[2].sidechain_to, vec![3]);
+}
+
+#[test]
+fn sidechains_go_either_way_but_never_loop() {
+    let mut s = session();
+    // A higher-numbered insert keys a lower one.
+    run(&mut s, "mixer.sidechain_to 5 2 on");
+    run(&mut s, "mixer.add_effect 2 compressor");
+    run(&mut s, "mixer.set_effect_param 2 1 sidechain 5");
+    fails(&mut s, "mixer.sidechain_to 5 5 on");
+    fails(&mut s, "mixer.sidechain_to 0 2 on");
+    // 5 keys 2, so 2 must not feed 5, directly or through 4.
+    let err = fails(&mut s, "mixer.set_send 2 5 1");
+    assert!(err.to_string().contains("loop"), "{err}");
+    fails(&mut s, "mixer.sidechain_to 2 5 on");
+    run(&mut s, "mixer.set_send 2 4 1");
+    fails(&mut s, "mixer.sidechain_to 4 5 on");
+    // A send effect closing the loop is refused too.
+    run(&mut s, "mixer.add_effect 3 send");
+    run(&mut s, "mixer.sidechain_to 5 3 on");
+    let err = fails(&mut s, "mixer.set_effect_param 3 1 target 5");
+    assert!(err.to_string().contains("loop"), "{err}");
+    run(&mut s, "mixer.set_effect_param 3 1 target 4");
+    // Routes to the master are fine; removing a route keeps the setting.
+    run(&mut s, "mixer.sidechain_to 1 0 on");
+    run(&mut s, "mixer.sidechain_to 5 2 off");
+    assert!((s.project().mixer[2].effects[0].values[5] - 5.0).abs() < f32::EPSILON);
+    run(&mut s, "edit.undo");
+    assert_eq!(s.project().mixer[5].sidechain_to, vec![2, 3]);
+}
+
+#[test]
+fn moving_tracks_keeps_sidechain_routes() {
+    let mut s = session();
+    run(&mut s, "mixer.sidechain_to 2 1 on");
+    run(&mut s, "mixer.add_effect 1 compressor");
+    run(&mut s, "mixer.set_effect_param 1 1 sidechain 2");
+    run(&mut s, "mixer.move_track 1 right");
+    assert_eq!(s.project().mixer[1].sidechain_to, vec![2]);
+    assert!((s.project().mixer[2].effects[0].values[5] - 1.0).abs() < f32::EPSILON);
+    // A send effect between neighbours still blocks the swap.
+    run(&mut s, "mixer.add_effect 3 send");
+    run(&mut s, "mixer.set_effect_param 3 1 target 4");
+    fails(&mut s, "mixer.move_track 3 right");
+}
+
+#[test]
+fn plugin_effects_take_a_sidechain() {
+    let mut s = session();
+    run(&mut s, "mixer.add_plugin 2 org.example.comp Comp");
+    fails(&mut s, "mixer.set_effect_param 2 1 sidechain 1");
+    run(&mut s, "mixer.sidechain_to 1 2 on");
+    run(&mut s, "mixer.set_effect_param 2 1 sidechain 1");
+    assert!((s.project().mixer[2].effects[0].values[0] - 1.0).abs() < f32::EPSILON);
 }
 
 #[test]
@@ -1808,6 +1875,7 @@ fn vocoder_sidechain_and_impulse_files() {
     let mut s = session();
     run(&mut s, "mixer.add_effect 3 vocoder");
     fails(&mut s, "mixer.set_effect_param 3 1 sidechain 4");
+    run(&mut s, "mixer.sidechain_to 1 3 on");
     run(&mut s, "mixer.set_effect_param 3 1 sidechain 1");
     fails(&mut s, "mixer.remove_track 1");
     fails(&mut s, "mixer.set_effect_file 3 1 ir:hall");

@@ -590,36 +590,81 @@ fn song_loop_region_limits_playback_but_not_export() {
     assert_eq!(full.length(), 8 * bar);
 }
 
-#[test]
-fn sidechained_compressor_ducks_on_each_kick() {
+/// A pad on insert `pad` ducked by a kick on insert `kick` (kept off the
+/// master), with `extra` commands after: the pad's level before the second
+/// kick (at 1 s) and under it.
+fn ducking(pad: usize, kick: usize, extra: &str) -> (f32, f32) {
     let mut s = session();
     run(
         &mut s,
-        "project.set_tempo 120
-         channel.add_sampler builtin:kick
-         channel.add_synth Pad
-         step.toggle 1 0
-         step.toggle 1 8
-         note.add 2 0 16 A4
-         channel.route 1 1
-         channel.route 2 2
-         mixer.route_to_master 1 off
-         mixer.add_effect 2 compressor
-         mixer.set_effect_param 2 1 threshold -40
-         mixer.set_effect_param 2 1 ratio 20
-         mixer.set_effect_param 2 1 sidechain 1",
+        &format!(
+            "project.set_tempo 120
+             channel.add_sampler builtin:kick
+             channel.add_synth Pad
+             step.toggle 1 0
+             step.toggle 1 8
+             note.add 2 0 16 A4
+             channel.route 1 {kick}
+             channel.route 2 {pad}
+             mixer.route_to_master {kick} off
+             mixer.add_effect {pad} compressor
+             mixer.set_effect_param {pad} 1 threshold -40
+             mixer.set_effect_param {pad} 1 ratio 20
+             mixer.sidechain_to {kick} {pad} on
+             mixer.set_effect_param {pad} 1 sidechain {kick}
+             {extra}"
+        ),
     );
     let options = RenderOptions {
         max_tail_seconds: 0.0,
         ..RenderOptions::default()
     };
-    let ducked = render(s.project(), options).0;
-    // The pad holds steady before the second kick (at 1 s) and drops under it.
-    let before = rms(&ducked[44_100 - 8_000..44_100 - 500]);
-    let under = rms(&ducked[44_100 + 500..44_100 + 4_000]);
+    let out = render(s.project(), options).0;
+    (
+        rms(&out[44_100 - 8_000..44_100 - 500]),
+        rms(&out[44_100 + 500..44_100 + 4_000]),
+    )
+}
+
+#[test]
+fn sidechained_compressor_ducks_on_each_kick() {
+    let (before, under) = ducking(2, 1, "");
     assert!(
         under < 0.5 * before,
         "pad ducks under the kick: before {before}, under {under}"
+    );
+}
+
+#[test]
+fn a_higher_numbered_insert_keys_a_lower_one() {
+    // The kick on insert 7 is processed before the pad on insert 2.
+    let (before, under) = ducking(2, 7, "");
+    assert!(
+        under < 0.5 * before,
+        "pad ducks under the kick: before {before}, under {under}"
+    );
+    // The same through a bus: kick 7 sends to 9, which keys the pad on 3.
+    let (before, under) = ducking(
+        3,
+        7,
+        "mixer.sidechain_to 7 3 off
+         mixer.set_send 7 9 1
+         mixer.route_to_master 9 off
+         mixer.sidechain_to 9 3 on
+         mixer.set_effect_param 3 1 sidechain 9",
+    );
+    assert!(
+        under < 0.5 * before,
+        "pad ducks under the bus: before {before}, under {under}"
+    );
+}
+
+#[test]
+fn removing_the_sidechain_route_stops_the_ducking() {
+    let (before, under) = ducking(2, 5, "mixer.sidechain_to 5 2 off");
+    assert!(
+        under > 0.8 * before,
+        "no route, no ducking: before {before}, under {under}"
     );
 }
 
@@ -1623,7 +1668,7 @@ fn vocoder_follows_its_sidechain() {
                 "channel.add_synth\nnote.add 1 0 16 C4 110\nchannel.route 1 1\n\
                  mixer.route_to_master 1 off\nchannel.add_synth\n\
                  note.add 2 0 16 C3 110\nchannel.route 2 2\n\
-                 mixer.add_effect 2 vocoder\nmixer.set_effect_param 2 1 sidechain {sidechain}"
+                 mixer.add_effect 2 vocoder\nmixer.sidechain_to 1 2 on\nmixer.set_effect_param 2 1 sidechain {sidechain}"
             ),
         );
         let options = RenderOptions {

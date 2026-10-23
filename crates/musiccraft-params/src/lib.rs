@@ -1024,6 +1024,10 @@ const SCRATCH_PARAMS: &[ParamSpec] = &[
     spec("mix", 0.0, 1.0, 1.0, ""),
 ];
 
+/// A hosted plugin effect's own settings (its parameters are the plugin's):
+/// the insert whose output feeds the plugin's first auxiliary input.
+const PLUGIN_PARAMS: &[ParamSpec] = &[int_spec("sidechain", 0.0, 127.0, 0.0)];
+
 const RACK_PARAMS: &[ParamSpec] = &[
     spec("dry", 0.0, 1.0, 1.0, ""),
     spec("branch1_level", 0.0, 1.25, 1.0, ""),
@@ -1504,7 +1508,7 @@ impl EffectKind {
             Self::BandSplit => BAND_SPLIT_PARAMS,
             Self::Scratch => SCRATCH_PARAMS,
             Self::Rack => RACK_PARAMS,
-            Self::Plugin => &[],
+            Self::Plugin => PLUGIN_PARAMS,
         }
     }
 

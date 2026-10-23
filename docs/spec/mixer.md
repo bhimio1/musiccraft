@@ -12,8 +12,10 @@
 - Channels feed exactly one track. Each insert feeds the master unless
   `mixer.route_to_master <track> off`, and may also have up to eight post-fader
   **sends** to higher-numbered inserts (`mixer.set_send <track> <target>
-  <level>`; level 0 removes it). Sends only go "up", so routing can never form a
-  feedback loop and tracks are processed in number order. This builds buses (for
+  <level>`; level 0 removes it). Sends only go "up", and a send that would close
+  a loop through a sidechain route is refused, so routing never feeds back.
+  Tracks are processed in number order unless a sidechain route asks for a
+  higher-numbered insert first (see *Sidechain*). This builds buses (for
   example drums 1–3 into insert 10) and shared effect returns.
 - Removing a track removes sends into it and renumbers sends past it; undo
   restores them.
@@ -23,7 +25,7 @@
 - Commands: `mixer.add_track`, `mixer.remove_track` (channels routed to it move to
   the master; undo restores them), `mixer.rename`, `mixer.set_volume`,
   `mixer.set_pan`, `mixer.set_mute`, `mixer.toggle_mute`, `mixer.set_solo`,
-  `mixer.toggle_solo`, `mixer.set_send`, `mixer.route_to_master`, `mixer.add_effect`, `mixer.remove_effect`,
+  `mixer.toggle_solo`, `mixer.set_send`, `mixer.route_to_master`, `mixer.sidechain_to`, `mixer.add_effect`, `mixer.remove_effect`,
   `mixer.move_effect`, `mixer.set_effect_param`, `mixer.set_effect_enabled`,
   `mixer.toggle_effect`. Effect slots are numbered from 1. All are undoable.
 - **Track colour**: `mixer.set_track_color <track> <1-16|none>` (undoable,
@@ -127,9 +129,9 @@ The `send` effect's `target` and the band splitter's targets follow the same
 renumbering rules as sidechain sources (below).
 
 Effects with a `sidechain` parameter (the compressor and the vocoder) read the
-post-fader output of the insert it names: a lower-numbered insert, or any insert
-for the master. Removing that insert is refused while it is used; removing
-another renumbers the source.
+post-fader output of the track it names, which must be routed to their track as
+a sidechain (see *Sidechain*). Removing that insert is refused while it is
+used; removing another renumbers the source.
 
 `mixer.set_effect_file <track> <slot> <file|ir:name|->` sets the convolution
 reverb's impulse response: a WAV/FLAC file (any length, cut at six seconds) or
@@ -324,13 +326,37 @@ Ranges and defaults are defined in `musiccraft-params`.
 
 ## Sidechain
 
-- A compressor's `sidechain` parameter names an insert whose post-fader output
-  drives its level detection (classic "kick ducks the bass"). The source must be
-  a lower-numbered insert, or any insert for a compressor on the master, so it is
-  always processed first. A source can be taken off the master
-  (`mixer.route_to_master <t> off`) to key without being heard.
-- Removing a track used as a sidechain source is refused; removing or inserting
-  other tracks renumbers sources.
+Sidechaining follows FL Studio's model: a track is first *routed* to another
+as a sidechain, then an effect on the receiving track picks it as its input.
+
+- **Sidechain routes.** `mixer.sidechain_to <source> <target> on|off`
+  (undoable) routes an insert's post-fader output to another track as a key
+  signal only: nothing is added to what the target plays. The source is an
+  insert; the target is any other track, the master included. An insert has at
+  most 8 sidechain routes. In the mixer, select the source insert, right-click
+  the routing arrow under the target and choose **Sidechain to this track**
+  (choose it again to remove the route). A sidechain route draws that arrow as a
+  dashed outline in the highlight tone, and the strip's output summary lists it
+  as `SC n`.
+- **Picking the input.** The compressor's and vocoder's `sidechain` parameter,
+  and the `sidechain` setting of a hosted plugin effect (fed to the plugin's
+  first auxiliary input; plugins without one ignore it), name the track whose
+  key they use, or 0 for none. The track must have a sidechain route to the
+  effect's track; naming one without a route is refused with a hint to add it.
+  In the effect window the parameter is a drop-down: **Off**, then each track
+  routed to this one as a sidechain (number and name). Removing the route
+  silences the key but keeps the setting, as in FL Studio.
+- **Any direction.** A source may be higher- or lower-numbered than its target.
+  The mixer processes inserts in dependency order: an insert always runs after
+  every insert that sends to it (sends, send effects, band splits) or keys it
+  (sidechain routes), and otherwise in number order; the master runs last. So a
+  sidechain adds no latency. A route, send or send-effect target that would
+  close a loop (the target already feeds the source) is refused.
+- Removing a track that an effect uses as its sidechain is refused. Removing
+  or inserting other tracks renumbers routes and sources; routes into a removed
+  track come back with it on undo. Moving a track keeps its routes.
+- Projects saved before sidechain routes existed load with a route added for
+  every effect sidechain that names a track, so they sound the same.
 
 ## Metering
 
@@ -348,6 +374,12 @@ Ranges and defaults are defined in `musiccraft-params`.
   follow the mixer layout described in the FL Studio online manual, "Mixer"
   (per-insert parametric EQ, effect slot mix levels, audio input/output
   selection), in our own drawing; band ranges and defaults are our own.
+
+- Sidechain routes ("Sidechain to this track" on the routing arrow's
+  right-click menu, a route that carries no audio, then picking that track as
+  an effect's sidechain input): the FL Studio online manual, "Mixer" (routing)
+  and "Fruity Limiter" (sidechain), as described by the owner on 2026-10-23.
+  The processing order, loop checks, drawing and wording are our own.
 
 - Mixer layout (master plus numbered inserts, channel routing, per-insert effect
   slots) follows the workflow described in the FL Studio online manual, "Mixer"
