@@ -121,9 +121,9 @@ pub fn show(
     }
 }
 
-/// A browser sound over a sampler channel's row replaces that channel's
-/// sample; anywhere else in the rack it (or a generator) adds a channel. The
-/// row or the whole rack is outlined to show which.
+/// A browser item over a channel's row replaces that channel's sound;
+/// anywhere else in the rack it adds a channel. The row or the whole rack is
+/// outlined to show which.
 fn drop_target(
     ctx: &egui::Context,
     state: &UiState,
@@ -134,18 +134,12 @@ fn drop_target(
     let Some(pointer) = ctx.pointer_hover_pos() else {
         return;
     };
-    let dragged = egui::DragAndDrop::payload::<crate::browser::Dragged>(ctx);
-    let sample = dragged.as_ref().and_then(|d| d.sample().map(str::to_owned));
-    let sampler_row = sample.as_ref().and_then(|_| {
-        state.rack_rows.iter().find(|(index, span)| {
-            span.contains(pointer.y)
-                && matches!(
-                    project.channels.get(*index).map(|c| &c.instrument),
-                    Some(Instrument::Sampler { .. })
-                )
-        })
-    });
-    let outline = match sampler_row {
+    let target = state
+        .rack_rows
+        .iter()
+        .find(|(_, span)| span.contains(pointer.y))
+        .filter(|(index, _)| *index < project.channels.len());
+    let outline = match target {
         Some((_, span)) => {
             egui::Rect::from_x_y_ranges(window.x_range(), *span).shrink2(egui::vec2(4.0, 0.0))
         }
@@ -157,7 +151,7 @@ fn drop_target(
     ))
     .rect_stroke(
         outline,
-        if sampler_row.is_some() { 2.0 } else { 6.0 },
+        if target.is_some() { 2.0 } else { 6.0 },
         egui::Stroke::new(2.0, theme::ACCENT),
         egui::StrokeKind::Inside,
     );
@@ -167,14 +161,45 @@ fn drop_target(
     let Some(dragged) = egui::DragAndDrop::take_payload::<crate::browser::Dragged>(ctx) else {
         return;
     };
-    let invocation = match (sampler_row, sample) {
-        (Some((index, _)), Some(sample)) => Some(Invocation::new(
-            "channel.set_sample",
-            [(index + 1).to_string(), sample],
-        )),
-        _ => dragged.add_channel(),
+    let invocation = match target {
+        Some((index, _)) => replace_sound(project, *index, &dragged),
+        None => dragged.add_channel(),
     };
     actions.extend(invocation.map(Action::Run));
+}
+
+/// The command that gives channel `index` the sound of `dragged`: a new
+/// sample for channels that play one, otherwise the dragged item is added as
+/// a channel, its sound swapped in, and the added channel removed again, as
+/// one undo step.
+fn replace_sound(
+    project: &Project,
+    index: usize,
+    dragged: &crate::browser::Dragged,
+) -> Option<Invocation> {
+    let channel = project.channels.get(index)?;
+    let number = (index + 1).to_string();
+    if let Some(sample) = dragged.sample()
+        && matches!(
+            channel.instrument,
+            Instrument::Sampler { .. } | Instrument::Granular { .. } | Instrument::Resynth { .. }
+        )
+    {
+        return Some(Invocation::new(
+            "channel.set_sample",
+            [number, sample.to_owned()],
+        ));
+    }
+    let add = dragged.add_channel()?;
+    let added = (project.channels.len() + 1).to_string();
+    Some(Invocation::new(
+        musiccraft_commands::BATCH,
+        [
+            add.to_string(),
+            Invocation::new("channel.swap_sound", [number, added.clone()]).to_string(),
+            Invocation::new("channel.remove", [added]).to_string(),
+        ],
+    ))
 }
 
 fn header(ui: &mut egui::Ui, state: &mut UiState, project: &Project, actions: &mut Vec<Action>) {

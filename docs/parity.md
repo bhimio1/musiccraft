@@ -153,6 +153,7 @@ of contents; see `docs/clean-room.md`.
 | Channel | Arpeggiator (up, down, up-down, random; rate, octaves, gate) | `spec:piano-roll.md` `done` |
 | Browser | Folders, search, click to preview, drag to rack or playlist | `done` |
 | Browser | Plugin database: click selects, double-click or drag adds | `spec:channel-rack.md` `done` |
+| Channel rack | Drop a sound, generator or preset on a channel to replace its sound | `cmd:channel.swap_sound` `spec:channel-rack.md` `done` |
 | Channel rack | Step buttons: right-click erases, left/right drag paints or erases | `spec:channel-rack.md` `done` |
 | Controls | Middle-click or double-click resets any knob, fader or slider | `spec:controls.md` `done` |
 | Transport | Oscilloscope, CPU meter, master volume | `done` |
