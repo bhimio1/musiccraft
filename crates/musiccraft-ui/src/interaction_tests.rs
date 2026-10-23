@@ -4938,3 +4938,55 @@ fn the_rack_and_the_piano_roll_share_one_note_clipboard() {
     assert_eq!(h.frame(vec![paste]).len(), 1, "one undo step");
     assert_eq!(notes_of(&h, 0), [(8 * step, 67)]);
 }
+
+#[test]
+fn right_clicking_a_routing_arrow_sidechains_the_selected_insert() {
+    let mut h = Harness::new(&["mixer.add_effect 1 compressor"]);
+    h.state.windows.mixer = true;
+    h.state.selected_track = 3;
+    h.settle();
+    let mixer = window_rect(&h, "mixer-window");
+    let find = |h: &mut Harness, area: Rect, prefix: &str| -> Pos2 {
+        let (columns, rows) = (
+            (area.width() / 6.0) as usize,
+            (area.height() / 4.0) as usize,
+        );
+        (0..columns)
+            .flat_map(|i| (0..rows).map(move |j| (i, j)))
+            .map(|(i, j)| area.left_top() + vec2(6.0 * i as f32, 4.0 * j as f32))
+            .find(|p| {
+                h.frame(vec![Event::PointerMoved(*p)]);
+                h.frame(vec![]);
+                h.state
+                    .hint
+                    .as_deref()
+                    .is_some_and(|t| t.starts_with(prefix))
+            })
+            .unwrap_or_else(|| panic!("nothing hinted {prefix:?}"))
+    };
+    // Insert 1 is below the selected insert 3: no audio route, but a sidechain.
+    let arrow = find(&mut h, mixer, "Right-click: Sidechain to this track");
+    h.click(arrow, PointerButton::Secondary);
+    h.settle();
+    let around = Rect::from_min_size(arrow - vec2(10.0, 10.0), vec2(220.0, 80.0));
+    let item = find(&mut h, around, "Its output reaches");
+    let ran = h.click(item, PointerButton::Primary);
+    assert_eq!(ran, ["mixer.sidechain_to 3 1 on"]);
+    h.settle();
+    assert_eq!(h.session.project().mixer[3].sidechain_to, vec![1]);
+    assert_eq!(h.state.selected_track, 3, "the menu click selects no strip");
+    // The arrow now says so, and the compressor can pick insert 3.
+    h.frame(vec![Event::PointerMoved(arrow)]);
+    h.frame(vec![]);
+    assert!(
+        h.state
+            .hint
+            .as_deref()
+            .is_some_and(|t| t.starts_with("Sidechained here")),
+        "{:?}",
+        h.state.hint
+    );
+    h.session
+        .run_line("mixer.set_effect_param 1 1 sidechain 3")
+        .unwrap();
+}

@@ -107,6 +107,12 @@ pub struct TrackParams {
     pub sends: [SendParams; MAX_SENDS],
     /// Number of active sends.
     pub send_count: u8,
+    /// Tracks this insert keys as a sidechain (its output reaches their
+    /// effects' sidechain inputs, not their audio); only the first
+    /// `sidechain_count` are used.
+    pub sidechain_to: [u16; MAX_SENDS],
+    /// Number of sidechain routes.
+    pub sidechain_count: u8,
     /// Stereo separation, -1 (mono) .. 0 (unchanged) .. 1 (side doubled).
     pub separation: f32,
     /// Flip the polarity of both sides.
@@ -130,6 +136,8 @@ impl Default for TrackParams {
             to_master: true,
             sends: [SendParams::default(); MAX_SENDS],
             send_count: 0,
+            sidechain_to: [0; MAX_SENDS],
+            sidechain_count: 0,
             separation: 0.0,
             invert: false,
             swap: false,
@@ -152,6 +160,21 @@ impl TrackParams {
     pub fn active_sends(&self) -> &[SendParams] {
         let count = usize::from(self.send_count).min(MAX_SENDS);
         self.sends.get(..count).unwrap_or_default()
+    }
+
+    /// The tracks this insert keys as a sidechain.
+    #[must_use]
+    pub fn sidechain_targets(&self) -> &[u16] {
+        let count = usize::from(self.sidechain_count).min(MAX_SENDS);
+        self.sidechain_to.get(..count).unwrap_or_default()
+    }
+
+    /// Whether this insert keys track `track` as a sidechain.
+    #[must_use]
+    pub fn keys(&self, track: usize) -> bool {
+        self.sidechain_targets()
+            .iter()
+            .any(|&t| usize::from(t) == track)
     }
 }
 
@@ -218,6 +241,98 @@ pub(crate) const MAX_PEAK_TRACKS: usize = musiccraft_params::MAX_MIXER_TRACKS;
 pub struct Graph {
     pub(crate) channels: Vec<ChannelNode>,
     pub(crate) tracks: Vec<TrackNode>,
+    /// The order inserts are processed in, rebuilt every block.
+    pub(crate) schedule: Schedule,
+}
+
+/// Scratch space for ordering the inserts (one entry per track, allocated
+/// with the track).
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Schedule {
+    /// Track indices in processing order (inserts only; the master runs last).
+    pub(crate) order: Vec<u16>,
+    /// Per track: inputs not yet processed, or [`Schedule::PLACED`].
+    pub(crate) waiting: Vec<u16>,
+}
+
+impl Schedule {
+    /// Marks a track that already has its place.
+    const PLACED: u16 = u16::MAX;
+
+    /// Orders the inserts so each one runs after every insert feeding it
+    /// (sends, send effects, band splits, sidechain routes), and otherwise
+    /// lowest number first. A loop, which commands refuse, is broken at its
+    /// lowest-numbered insert.
+    pub(crate) fn build(&mut self, tracks: &[TrackNode]) {
+        let Self { order, waiting } = self;
+        order.clear();
+        let n = tracks.len().min(waiting.len());
+        let Some(waiting) = waiting.get_mut(..n) else {
+            return;
+        };
+        waiting.fill(0);
+        for (index, track) in tracks.iter().enumerate().take(n).skip(1) {
+            for_each_output(track, index, |t| {
+                if let Some(w) = waiting.get_mut(t) {
+                    *w = w.saturating_add(1);
+                }
+            });
+        }
+        if let Some(master) = waiting.first_mut() {
+            *master = Self::PLACED;
+        }
+        for _ in 1..n {
+            let next = waiting
+                .iter()
+                .position(|&w| w == 0)
+                .or_else(|| waiting.iter().position(|&w| w != Self::PLACED));
+            let Some(next) = next else {
+                break;
+            };
+            if let Some(w) = waiting.get_mut(next) {
+                *w = Self::PLACED;
+            }
+            order.push(u16::try_from(next).unwrap_or(u16::MAX));
+            if let Some(track) = tracks.get(next) {
+                for_each_output(track, next, |t| {
+                    if let Some(w) = waiting.get_mut(t).filter(|w| **w != Self::PLACED) {
+                        *w = w.saturating_sub(1);
+                    }
+                });
+            }
+        }
+    }
+}
+
+/// Calls `f` with every insert that track `index` feeds: its sends, its send
+/// effects' and band splitters' targets and its sidechain routes. The master
+/// and the track itself are left out.
+fn for_each_output(track: &TrackNode, index: usize, mut f: impl FnMut(usize)) {
+    let mut emit = |t: usize| {
+        if t != 0 && t != index {
+            f(t);
+        }
+    };
+    for send in track.params.active_sends() {
+        emit(usize::from(send.target));
+    }
+    for &t in track.params.sidechain_targets() {
+        emit(usize::from(t));
+    }
+    for slot in &track.effects {
+        let kind = slot.effect.kind();
+        if !matches!(
+            kind,
+            musiccraft_params::EffectKind::Send | musiccraft_params::EffectKind::BandSplit
+        ) {
+            continue;
+        }
+        for (i, value) in slot.params.values.iter().enumerate() {
+            if kind.is_send_target(i) && *value >= 0.5 {
+                emit(value.round() as usize);
+            }
+        }
+    }
 }
 
 impl Default for Graph {
@@ -233,6 +348,7 @@ impl Graph {
         let mut graph = Self {
             channels: Vec::new(),
             tracks: Vec::new(),
+            schedule: Schedule::default(),
         };
         graph.add_track(TrackParams::default(), Vec::new());
         graph
@@ -276,6 +392,8 @@ impl Graph {
             dry_left: vec![0.0; MAX_BLOCK],
             dry_right: vec![0.0; MAX_BLOCK],
         });
+        self.schedule.order.push(0);
+        self.schedule.waiting.push(0);
         self.tracks.len() - 1
     }
 

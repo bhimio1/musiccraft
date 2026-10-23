@@ -876,7 +876,11 @@ impl Engine {
             );
         }
         send_midi_controls(graph, &mut self.midi_out);
-        let Graph { channels, tracks } = graph;
+        let Graph {
+            channels,
+            tracks,
+            schedule,
+        } = graph;
         for node in channels.iter_mut() {
             clear(&mut node.left, frames);
             clear(&mut node.right, frames);
@@ -922,7 +926,14 @@ impl Engine {
             transport,
             voices: &self.voices,
         };
-        mix_tracks(tracks, fx, &mut self.externals, &self.meters);
+        schedule.build(tracks);
+        mix_tracks(
+            tracks,
+            &schedule.order,
+            fx,
+            &mut self.externals,
+            &self.meters,
+        );
         if let Some(master) = tracks.first_mut() {
             let TrackNode { left, right, .. } = master;
             let (l, r) = (prefix(left, frames), prefix(right, frames));
@@ -1441,23 +1452,34 @@ struct FxContext<'a> {
     voices: &'a [Voice],
 }
 
-/// Processes inserts in index order, then the master. Sends only go to
-/// higher-numbered inserts, so every track has received all of its input by the
-/// time it is processed.
+/// Processes the inserts in `order` (see [`crate::graph::Schedule`]), then
+/// the master. Every insert runs after the inserts that send to it or key it,
+/// so it has all of its input and its sidechain keys are finished.
 fn mix_tracks(
     tracks: &mut [TrackNode],
+    order: &[u16],
     fx: FxContext<'_>,
     externals: &mut Externals,
     meters: &Meters,
 ) {
     let frames = fx.frames;
-    for i in 1..tracks.len() {
+    for &i in order {
+        let i = usize::from(i);
+        if i == 0 || i >= tracks.len() {
+            continue;
+        }
         let (before, rest) = tracks.split_at_mut(i);
         let Some((track, after)) = rest.split_first_mut() else {
             continue;
         };
-        // Inserts below this one are finished and can key its compressors.
-        process_track(track, fx, externals, before, 0, Some((&mut *after, i + 1)));
+        process_track(
+            track,
+            i,
+            fx,
+            externals,
+            (before, 0),
+            Some((&mut *after, i + 1)),
+        );
         let (pl, pr) = (peak(&track.left, frames), peak(&track.right, frames));
         track.last_peak = pl.max(pr);
         meters.record_peak(i, pl, pr);
@@ -1478,12 +1500,41 @@ fn mix_tracks(
         }
     }
     if let Some((master, inserts)) = tracks.split_first_mut() {
-        process_track(master, fx, externals, inserts, 1, None);
+        process_track(master, 0, fx, externals, (inserts, 1), None);
         let (pl, pr) = (peak(&master.left, frames), peak(&master.right, frames));
         master.last_peak = pl.max(pr);
         meters.record_peak(0, pl, pr);
         publish_pitches(0, master, meters);
     }
+}
+
+/// The sidechain key for an effect on track `index` whose `sidechain`
+/// parameter names track `source`: that track's finished output, if it is
+/// routed to `index` as a sidechain. `low` and `high` are the other tracks,
+/// `low.0[j]` being track `j + low.1` (likewise for `high`).
+fn sidechain_key<'a>(
+    source: f32,
+    index: usize,
+    frames: usize,
+    low: (&'a [TrackNode], usize),
+    high: Option<(&'a [TrackNode], usize)>,
+) -> Option<(&'a [f32], &'a [f32])> {
+    if source < 0.5 {
+        return None;
+    }
+    let source = source.round() as usize;
+    let pick = |(tracks, offset): (&'a [TrackNode], usize)| {
+        source.checked_sub(offset).and_then(|j| tracks.get(j))
+    };
+    let track = pick(low).or_else(|| high.and_then(pick))?;
+    if !track.params.keys(index) {
+        return None;
+    }
+    let n = frames.min(track.left.len()).min(track.right.len());
+    Some((
+        track.left.get(..n).unwrap_or_default(),
+        track.right.get(..n).unwrap_or_default(),
+    ))
 }
 
 /// Publishes what the track's pitch detecting effects (corrector, tuner)
@@ -1504,16 +1555,17 @@ fn publish_pitches(index: usize, track: &TrackNode, meters: &Meters) {
     }
 }
 
-/// Runs a track's effects and fader. `keys` are already-processed tracks that
-/// may feed effect sidechains; `keys[i]` is mixer track `i + key_offset`.
-/// `later` holds the tracks a send effect may feed, `later.0[j]` being mixer
-/// track `j + later.1`; the master has none.
+/// Runs the effects and fader of track `index`. `earlier` are the tracks
+/// numbered below it, `earlier.0[j]` being mixer track `j + earlier.1`.
+/// `later` holds the higher-numbered tracks, which a send effect may feed,
+/// `later.0[j]` being mixer track `j + later.1`; the master has none. Either
+/// may hold a finished track keying an effect's sidechain.
 fn process_track(
     track: &mut TrackNode,
+    index: usize,
     fx: FxContext<'_>,
     externals: &mut Externals,
-    keys: &[TrackNode],
-    key_offset: usize,
+    earlier: (&[TrackNode], usize),
     mut later: Option<(&mut [TrackNode], usize)>,
 ) {
     let FxContext {
@@ -1559,8 +1611,20 @@ fn process_track(
                 *d = *s;
             }
         }
-        if let Some(index) = slot.external {
-            if let Some(Some(external)) = externals.get_mut(usize::from(index)) {
+        let source = slot
+            .effect
+            .kind()
+            .sidechain_index()
+            .and_then(|i| slot.params.values.get(i))
+            .copied()
+            .unwrap_or(0.0);
+        let high = later.as_ref().map(|(tracks, offset)| (&**tracks, *offset));
+        let key = sidechain_key(source, index, frames, earlier, high);
+        if let Some(external_slot) = slot.external {
+            if let Some(Some(external)) = externals.get_mut(usize::from(external_slot)) {
+                if let Some((kl, kr)) = key {
+                    external.sidechain(kl, kr);
+                }
                 external.process(l, r, &transport);
                 scrub(l, r);
             }
@@ -1587,26 +1651,6 @@ fn process_track(
             }
             continue;
         }
-        let source = slot
-            .effect
-            .kind()
-            .sidechain_index()
-            .and_then(|i| slot.params.values.get(i))
-            .copied()
-            .unwrap_or(0.0);
-        let key = match source {
-            source if source >= 0.5 => (source.round() as usize)
-                .checked_sub(key_offset)
-                .and_then(|i| keys.get(i))
-                .map(|t| {
-                    let n = frames.min(t.left.len()).min(t.right.len());
-                    (
-                        t.left.get(..n).unwrap_or_default(),
-                        t.right.get(..n).unwrap_or_default(),
-                    )
-                }),
-            _ => None,
-        };
         slot.effect
             .process_keyed(l, r, &slot.params.values, ctx, key);
         if scrub(l, r) {

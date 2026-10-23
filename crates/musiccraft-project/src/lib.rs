@@ -239,6 +239,10 @@ pub struct Project {
     /// The song's time signature from its start; new patterns take it.
     #[serde(default, skip_serializing_if = "TimeSig::is_common")]
     pub time_signature: TimeSig,
+    /// Whether sidechains need a route (`MixerTrack::sidechain_to`); false in
+    /// files from before routes existed, which get them added on load.
+    #[serde(default)]
+    sidechain_routes: bool,
     next_id: u32,
     #[serde(skip)]
     path: Option<PathBuf>,
@@ -286,6 +290,7 @@ impl Project {
             swing: 0.0,
             master_pitch: 0.0,
             time_signature: TimeSig::COMMON,
+            sidechain_routes: true,
             next_id: 2,
             path: None,
         }
@@ -648,6 +653,31 @@ impl Project {
         Ok(project)
     }
 
+    /// Adds a sidechain route for every effect whose sidechain names a track
+    /// (files from before routes existed keyed without one).
+    fn add_sidechain_routes(&mut self) {
+        let tracks = self.mixer.len();
+        let mut routes = Vec::new();
+        for (target, track) in self.mixer.iter().enumerate() {
+            for effect in &track.effects {
+                let Some(index) = effect.kind.sidechain_index() else {
+                    continue;
+                };
+                let source = effect.values.get(index).copied().unwrap_or(0.0).round() as usize;
+                if source > 0 && source < tracks && source != target {
+                    routes.push((source, target));
+                }
+            }
+        }
+        for (source, target) in routes {
+            let to = &mut self.mixer[source].sidechain_to;
+            if !to.contains(&target) && to.len() < MAX_SENDS {
+                to.push(target);
+                to.sort_unstable();
+            }
+        }
+    }
+
     /// Repairs dangling references after loading and checks invariants.
     fn validate(&mut self) -> Result<(), ProjectError> {
         let tempo = self.tempo_bpm;
@@ -686,7 +716,16 @@ impl Project {
             track.sends.truncate(MAX_SENDS);
             if i == 0 {
                 track.to_master = true;
+                track.sidechain_to.clear();
             }
+            track.sidechain_to.retain(|&t| t != i && t < tracks);
+            track.sidechain_to.sort_unstable();
+            track.sidechain_to.dedup();
+            track.sidechain_to.truncate(MAX_SENDS);
+        }
+        if !self.sidechain_routes {
+            self.add_sidechain_routes();
+            self.sidechain_routes = true;
         }
         let playlist = &mut self.playlist;
         playlist.muted_tracks.retain(|t| *t < PLAYLIST_TRACKS);

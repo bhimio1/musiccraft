@@ -214,6 +214,9 @@ fn contents(
     effect: &EffectSlot,
     actions: &mut Vec<Action>,
 ) {
+    if effect.kind.sidechain_index().is_some() {
+        sidechain_picker(ui, frame.project, (track, slot), effect, actions);
+    }
     if let Some(plugin) = &effect.plugin {
         let target = crate::plugins::Target::Effect(track, slot + 1);
         crate::plugins::panel(ui, state, frame.plugins, plugin, target, actions);
@@ -246,6 +249,73 @@ fn contents(
     ui.add_space(4.0);
     apply(state, target, effect, edits, actions);
     knob_row(ui, state, target, effect, actions);
+}
+
+/// The effect's sidechain input: off, or one of the tracks routed to this
+/// one as a sidechain (FL Studio style: route first, then pick).
+fn sidechain_picker(
+    ui: &mut egui::Ui,
+    project: &musiccraft_project::Project,
+    (track, slot): (usize, usize),
+    effect: &EffectSlot,
+    actions: &mut Vec<Action>,
+) {
+    let Some(index) = effect.kind.sidechain_index() else {
+        return;
+    };
+    let current = effect.values.get(index).copied().unwrap_or(0.0).round() as usize;
+    let name = |t: usize| {
+        project
+            .mixer
+            .get(t)
+            .map_or_else(|| format!("{t}"), |m| format!("{t} {}", m.name))
+    };
+    let routed: Vec<usize> = (1..project.mixer.len())
+        .filter(|&t| project.mixer[t].sidechain_to.contains(&track))
+        .collect();
+    let selected = match current {
+        0 => "Off".to_owned(),
+        t if routed.contains(&t) => name(t),
+        t => format!("{} (not routed)", name(t)),
+    };
+    let set = |value: usize| {
+        Action::Run(Invocation::new(
+            "mixer.set_effect_param",
+            [
+                track.to_string(),
+                (slot + 1).to_string(),
+                "sidechain".to_owned(),
+                value.to_string(),
+            ],
+        ))
+    };
+    ui.horizontal(|ui| {
+        ui.label("Sidechain");
+        egui::ComboBox::from_id_salt(("sidechain", track, slot))
+            .selected_text(selected)
+            .show_ui(ui, |ui| {
+                if ui.selectable_label(current == 0, "Off").clicked() {
+                    actions.push(set(0));
+                }
+                for &t in &routed {
+                    if ui.selectable_label(current == t, name(t)).clicked() {
+                        actions.push(set(t));
+                    }
+                }
+                if routed.is_empty() {
+                    ui.label(
+                        RichText::new("No inserts sidechained here yet")
+                            .small()
+                            .color(theme::TEXT_DIM),
+                    );
+                }
+            })
+            .response
+            .hint(
+                "The insert whose sound drives this effect. To add one, select it in the mixer, \
+                 right-click this track's arrow and choose Sidechain to this track",
+            );
+    });
 }
 
 /// The convolution reverb's impulse response: generated rooms or a file.
@@ -394,7 +464,9 @@ pub(crate) fn knob_row(
 ) {
     let in_rack = matches!(target, KnobTarget::Rack(..));
     let kind = effect.kind;
-    let hidden = |p: usize| in_rack && effect::is_routing(kind, p);
+    // The sidechain has its own picker above the knobs.
+    let hidden =
+        |p: usize| in_rack && effect::is_routing(kind, p) || Some(p) == kind.sidechain_index();
     let mut edits = Vec::new();
     effect::knob_row(
         ui,

@@ -326,10 +326,10 @@ fn idle_inserts(project: &Project) -> Vec<usize> {
             };
             *track == fresh
                 && !project.channels.iter().any(|c| c.mixer_track == t)
-                && !project
-                    .mixer
-                    .iter()
-                    .any(|other| other.sends.iter().any(|send| send.target == t))
+                && !project.mixer.iter().any(|other| {
+                    other.sends.iter().any(|send| send.target == t)
+                        || other.sidechain_to.contains(&t)
+                })
         })
         .collect()
 }
@@ -826,6 +826,7 @@ fn strip(
         .fill(fill)
         .corner_radius(2.0)
         .inner_margin(egui::Margin::symmetric(0, 2));
+    let mut on_arrow = false;
     let response = frame.show(ui, |ui| {
         ui.set_width(STRIP_WIDTH);
         ui.set_height(height - 4.0);
@@ -972,18 +973,23 @@ fn strip(
             if state.mixer_details {
                 details(ui, state, project, index, actions);
             }
-            route_arrow(ui, state, project, index, actions);
+            on_arrow = route_arrow(ui, state, project, index, actions);
         });
     });
     // A click anywhere on the strip selects it. This reads the pointer
     // instead of adding a strip-wide click area, which would sit on top of
     // the lights, switches and name and take their clicks and hovers.
-    let clicked_here = ui.input(|i| {
-        i.pointer.primary_clicked()
-            && i.pointer
-                .interact_pos()
-                .is_some_and(|p| response.response.rect.contains(p))
+    // Clicks on the routing arrow route the selected insert, and clicks in a
+    // menu above the strip belong to the menu: neither selects.
+    let click = ui.input(|i| {
+        i.pointer
+            .interact_pos()
+            .filter(|_| i.pointer.primary_clicked())
     });
+    let clicked_here = !on_arrow
+        && click.is_some_and(|p| {
+            response.response.rect.contains(p) && ui.ctx().layer_id_at(p) == Some(ui.layer_id())
+        });
     let toggling = ui.input(|i| i.modifiers.command && i.modifiers.shift);
     if clicked_here && ui.is_rect_visible(response.response.rect) && !toggling {
         if is_selected(state, index) {
@@ -1149,18 +1155,20 @@ fn effects_switch(
 }
 
 /// The arrow under a strip shows whether the selected insert sends here;
-/// clicking it toggles that route.
+/// clicking it toggles that route. Right-clicking offers "Sidechain to this
+/// track", which a dashed outline shows. Returns whether the pointer is on it.
 fn route_arrow(
     ui: &mut egui::Ui,
     state: &UiState,
     project: &Project,
     target: usize,
     actions: &mut Vec<Action>,
-) {
+) -> bool {
     let source = state.selected_track;
     let (rect, response) = ui.allocate_exact_size(vec2(STRIP_WIDTH, 14.0), egui::Sense::click());
+    let on_arrow = response.contains_pointer();
     let Some(from) = project.mixer.get(source) else {
-        return;
+        return on_arrow;
     };
     let c = rect.center();
     let down = vec![
@@ -1176,43 +1184,57 @@ fn route_arrow(
             egui::Stroke::NONE,
         ));
         response.hint(format!("This insert goes to {}", route_summary(from)));
-        return;
+        return on_arrow;
     }
-    let possible = source > 0 && (target == 0 || target > source);
+    if source == 0 {
+        return on_arrow;
+    }
+    let sidechained = from.sidechain_to.contains(&target);
+    sidechain_menu(&response, source, target, sidechained, actions);
+    let possible = target == 0 || target > source;
     if !possible {
-        // Inert: a faint outline where no route can go.
-        if source > 0 {
-            ui.painter().add(egui::Shape::convex_polygon(
-                down,
-                Color32::TRANSPARENT,
-                egui::Stroke::new(1.0, theme::RAISED_HOVER),
-            ));
-        }
-        return;
+        // Inert for audio: a faint outline (dashed when sidechained).
+        let edge = if sidechained {
+            theme::HIGHLIGHT
+        } else {
+            theme::RAISED_HOVER
+        };
+        arrow_outline(ui, &down, edge, sidechained);
+        response.hint(if sidechained {
+            "Sidechained here — right-click to remove"
+        } else {
+            "Right-click: Sidechain to this track"
+        });
+        return on_arrow;
     }
     let routed = if target == 0 {
         from.to_master
     } else {
         from.sends.iter().any(|s| s.target == target)
     };
-    // Routed: filled in the highlight tone. Possible: an outline that
-    // brightens on hover.
-    let (fill, edge) = if routed {
-        (theme::HIGHLIGHT, theme::HIGHLIGHT)
-    } else if response.hovered() {
-        (Color32::TRANSPARENT, theme::TEXT)
+    // Routed: filled in the highlight tone. Sidechained: a dashed outline in
+    // the highlight tone. Possible: an outline that brightens on hover.
+    if routed {
+        ui.painter().add(egui::Shape::convex_polygon(
+            down,
+            theme::HIGHLIGHT,
+            egui::Stroke::new(1.0, theme::HIGHLIGHT),
+        ));
     } else {
-        (Color32::TRANSPARENT, theme::TEXT_DIM)
-    };
-    ui.painter().add(egui::Shape::convex_polygon(
-        down,
-        fill,
-        egui::Stroke::new(1.0, edge),
-    ));
-    let hint = if routed {
-        "Routed here — click to remove"
-    } else {
-        "Click to route the selected insert here"
+        let edge = if sidechained {
+            theme::HIGHLIGHT
+        } else if response.hovered() {
+            theme::TEXT
+        } else {
+            theme::TEXT_DIM
+        };
+        arrow_outline(ui, &down, edge, sidechained);
+    }
+    let hint = match (routed, sidechained) {
+        (true, true) => "Routed and sidechained here — click to remove the route",
+        (true, false) => "Routed here — click to remove",
+        (false, true) => "Sidechained here — click to route audio too, right-click to remove",
+        (false, false) => "Click to route the selected insert here · right-click to sidechain",
     };
     if response.hint(hint).clicked() {
         let invocation = if target == 0 {
@@ -1235,6 +1257,53 @@ fn route_arrow(
         };
         actions.push(Action::Run(invocation));
     }
+    on_arrow
+}
+
+/// A routing arrow's outline, dashed for a sidechain route.
+fn arrow_outline(ui: &egui::Ui, points: &[egui::Pos2], color: Color32, dashed: bool) {
+    let stroke = egui::Stroke::new(1.0, color);
+    if dashed {
+        let mut closed = points.to_vec();
+        closed.extend(points.first().copied());
+        ui.painter()
+            .extend(egui::Shape::dashed_line(&closed, stroke, 2.0, 2.0));
+    } else {
+        ui.painter().add(egui::Shape::convex_polygon(
+            points.to_vec(),
+            Color32::TRANSPARENT,
+            stroke,
+        ));
+    }
+}
+
+/// The routing arrow's right-click menu: route the selected insert here as a
+/// sidechain only (FL Studio's "Sidechain to this track"), or remove it.
+fn sidechain_menu(
+    response: &egui::Response,
+    source: usize,
+    target: usize,
+    sidechained: bool,
+    actions: &mut Vec<Action>,
+) {
+    response.context_menu(|ui| {
+        if ui
+            .add(egui::Button::new("Sidechain to this track").selected(sidechained))
+            .hint("Its output reaches this track's sidechain inputs, not its audio")
+            .clicked()
+        {
+            run(
+                actions,
+                "mixer.sidechain_to",
+                [
+                    source.to_string(),
+                    target.to_string(),
+                    if sidechained { "off" } else { "on" }.to_owned(),
+                ],
+            );
+            ui.close();
+        }
+    });
 }
 
 /// Where an insert's output goes: `M`, `3`, `M, 3, 5` or `none` (drawn
@@ -1245,6 +1314,10 @@ fn route_summary(track: &MixerTrack) -> String {
         to.push("M".to_owned());
     }
     to.extend(track.sends.iter().map(|s| s.target.to_string()));
+    to.extend(track.sidechain_to.iter().map(|t| match t {
+        0 => "SC M".to_owned(),
+        t => format!("SC {t}"),
+    }));
     if to.is_empty() {
         "none".to_owned()
     } else {

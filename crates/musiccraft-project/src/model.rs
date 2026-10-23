@@ -782,6 +782,10 @@ pub struct MixerTrack {
     /// Sends to higher-numbered inserts, sorted by target.
     #[serde(default)]
     pub sends: Vec<MixerSend>,
+    /// Tracks this insert keys as a sidechain, sorted: its post-fader output
+    /// reaches their effects' sidechain inputs but is not heard there.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sidechain_to: Vec<usize>,
     /// Stereo separation, -1 (mono) .. 0 (as is) .. 1 (side doubled).
     #[serde(default, skip_serializing_if = "is_zero_f32")]
     pub separation: f32,
@@ -855,6 +859,7 @@ impl MixerTrack {
             effects: Vec::new(),
             to_master: true,
             sends: Vec::new(),
+            sidechain_to: Vec::new(),
             separation: 0.0,
             phase_invert: false,
             swap_sides: false,
