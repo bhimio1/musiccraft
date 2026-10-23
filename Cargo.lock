@@ -1788,7 +1788,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-antiserum"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "musiccraft-dsp",
  "musiccraft-params",
@@ -1796,7 +1796,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-antiserum-presets"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "musiccraft-antiserum",
  "musiccraft-dsp",
@@ -1809,7 +1809,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-app"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "eframe",
  "midir",
@@ -1830,7 +1830,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-audio"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "cpal",
  "musiccraft-engine",
@@ -1839,7 +1839,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-clap"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "clap-sys 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc",
@@ -1856,14 +1856,14 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-clap-testplugin"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "clap-sys 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "musiccraft-cli"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "musiccraft-audio",
  "musiccraft-clap",
@@ -1877,7 +1877,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-commands"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "musiccraft-antiserum",
  "musiccraft-antiserum-presets",
@@ -1894,7 +1894,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-demucs"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "musiccraft-dsp",
  "musiccraft-stems",
@@ -1905,14 +1905,14 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-dsp"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "musiccraft-params",
 ]
 
 [[package]]
 name = "musiccraft-editors"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "eframe",
  "egui",
@@ -1929,7 +1929,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-engine"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "musiccraft-dsp",
  "musiccraft-formula",
@@ -1941,25 +1941,25 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-file-dialog"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "rfd",
 ]
 
 [[package]]
 name = "musiccraft-flp"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "musiccraft-formula"
-version = "0.4.2"
+version = "0.4.3"
 
 [[package]]
 name = "musiccraft-instruments"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "musiccraft-dsp",
  "musiccraft-params",
@@ -1967,7 +1967,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-mcp"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "musiccraft-cli",
  "musiccraft-commands",
@@ -1978,7 +1978,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-meter"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "musiccraft-params",
  "serde",
@@ -1987,14 +1987,14 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-params"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "musiccraft-patch"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "serde",
  "serde_json",
@@ -2002,11 +2002,11 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-paths"
-version = "0.4.2"
+version = "0.4.3"
 
 [[package]]
 name = "musiccraft-plugin-editor"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "baseview",
  "egui",
@@ -2019,7 +2019,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-plugin-export"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "egui",
  "musiccraft-antiserum",
@@ -2046,14 +2046,14 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-plugin-window"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "x11rb",
 ]
 
 [[package]]
 name = "musiccraft-project"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "musiccraft-meter",
  "musiccraft-params",
@@ -2064,7 +2064,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-render"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "musiccraft-antiserum",
  "musiccraft-antiserum-presets",
@@ -2086,7 +2086,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-samples"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "hound",
  "mp3lame-encoder",
@@ -2098,7 +2098,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-serum"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "miniz_oxide 0.8.9",
  "musiccraft-antiserum",
@@ -2110,14 +2110,14 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-stems"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "musiccraft-dsp",
 ]
 
 [[package]]
 name = "musiccraft-ui"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "egui",
  "musiccraft-antiserum",
@@ -2134,7 +2134,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-vst3"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "libc",
  "libloading 0.8.9",
@@ -2150,14 +2150,14 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-vst3-testplugin"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "vst3",
 ]
 
 [[package]]
 name = "musiccraft-wavetables"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "hound",
  "musiccraft-antiserum",
@@ -4805,7 +4805,7 @@ checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
 
 [[package]]
 name = "xtask"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "musiccraft-commands",
  "musiccraft-params",
