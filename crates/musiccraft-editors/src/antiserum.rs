@@ -949,13 +949,14 @@ fn control(ui: &mut Ui, cx: &mut Cx<'_, '_>, index: usize) {
         });
         return;
     }
-    let out = widgets::labeled_knob(
+    let out = widgets::stepped_labeled_knob(
         ui,
         &caption(spec.name),
         to_unit(&spec, value),
         to_unit(&spec, spec.default),
         spec.min < 0.0 && spec.max > 0.0,
         &text(index, value),
+        spec.steps(),
     );
     (cx.menu)(&out.response, spec.name);
     if out.started {
@@ -1326,7 +1327,15 @@ fn small_knob(ui: &mut Ui, cx: &mut Cx<'_, '_>, index: usize) {
         return;
     };
     let value = cx.view.value(index);
-    let out = widgets::knob(ui, value, spec.min, spec.max, spec.default, spec.min < 0.0);
+    let out = widgets::stepped_knob(
+        ui,
+        value,
+        spec.min,
+        spec.max,
+        spec.default,
+        spec.min < 0.0,
+        spec.steps(),
+    );
     let response = out
         .response
         .hint(format!("{}: {}", spec.name, text(index, value)));

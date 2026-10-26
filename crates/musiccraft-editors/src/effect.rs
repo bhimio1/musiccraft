@@ -190,13 +190,14 @@ pub fn knob_row(
             }
             let text = musiccraft_dsp::describe::text(effect.kind, spec, value);
             let label = pretty(spec.name);
-            let out = widgets::labeled_knob(
+            let out = widgets::stepped_labeled_knob(
                 ui,
                 &label,
                 spec.to_unit(value),
                 spec.to_unit(spec.default),
                 spec.min < 0.0 && spec.max > 0.0,
                 &text,
+                spec.steps(),
             );
             on_knob(&out.response, spec);
             if out.started {

@@ -133,13 +133,14 @@ fn param_knob(
 ) {
     let spec = spec(index);
     let value = channel.params.get(index);
-    let out = widgets::labeled_knob(
+    let out = widgets::stepped_labeled_knob(
         ui,
         label,
         spec.to_unit(value),
         spec.to_unit(spec.default),
         spec.min < 0.0 && spec.max > 0.0,
         &spec.format(value),
+        spec.steps(),
     );
     crate::automation::menu(
         &out.response,

@@ -121,9 +121,45 @@ const KNOB_DRAG_FINE: f32 = 600.0;
 /// Wheel points for a knob's whole range.
 const KNOB_WHEEL: f32 = 600.0;
 
+fn steps_id(widget: egui::Id) -> egui::Id {
+    widget.with("steps")
+}
+
+/// `t` (a 0..1 position) on the nearest of `steps` equal steps.
+fn snap(t: f32, steps: u32) -> f32 {
+    let n = steps as f32;
+    (t * n).round() / n
+}
+
+/// Where a stepped knob's gesture really is: the unsnapped position the
+/// drag and wheel have reached, kept while the knob is dragged or hovered so
+/// that movements smaller than a step add up instead of snapping back. It
+/// starts over from `t` when the value changes from elsewhere (automation, a
+/// preset) to something the gesture did not reach. The value seen last frame
+/// is remembered too, so a host that applies the change a few frames late
+/// does not count as such a change.
+fn stepped_base(ui: &Ui, response: &Response, t: f32, steps: u32) -> f32 {
+    let held = ui.data(|d| d.get_temp::<(f32, f32)>(steps_id(response.id)));
+    let near = |a: f32, b: f32| (a - b).abs() < 0.25 / steps as f32;
+    match held {
+        Some((raw, last)) if near(snap(raw, steps), t) || near(last, t) => raw,
+        _ => t,
+    }
+}
+
 /// The one knob rule for every size, over a 0..1 position: vertical drag
-/// (finer with Shift), the wheel, and reset to `default`.
-fn knob_input(ui: &Ui, response: &Response, t: f32, default: f32) -> Option<f32> {
+/// (finer with Shift), the wheel, and reset to `default`. A knob with
+/// `steps` lands only on those steps; small movements add up until they
+/// reach the next one (see [`stepped_base`]).
+fn knob_input(
+    ui: &Ui,
+    response: &Response,
+    t: f32,
+    default: f32,
+    steps: Option<u32>,
+) -> Option<f32> {
+    let steps = steps.filter(|n| *n > 0);
+    let base = steps.map_or(t, |n| stepped_base(ui, response, t, n));
     let mut changed = None;
     if response.dragged_by(PointerButton::Primary) {
         let fine = ui.input(|i| i.modifiers.shift);
@@ -132,8 +168,8 @@ fn knob_input(ui: &Ui, response: &Response, t: f32, default: f32) -> Option<f32>
             changed = Some(detent(
                 ui,
                 response,
-                t,
-                (t + delta).clamp(0.0, 1.0),
+                base,
+                (base + delta).clamp(0.0, 1.0),
                 default,
             ));
         }
@@ -144,13 +180,28 @@ fn knob_input(ui: &Ui, response: &Response, t: f32, default: f32) -> Option<f32>
     if response.hovered() {
         let scroll = ui.input(|i| i.smooth_scroll_delta.y);
         if scroll != 0.0 {
-            changed = Some((t + scroll / KNOB_WHEEL).clamp(0.0, 1.0));
+            changed = Some((base + scroll / KNOB_WHEEL).clamp(0.0, 1.0));
         }
     }
     if wants_reset(response) {
         changed = Some(default);
     }
+    let Some(n) = steps else {
+        return changed;
+    };
+    let id = steps_id(response.id);
+    let raw = changed.unwrap_or(base);
+    ui.data_mut(|d| {
+        if (response.dragged() || response.hovered()) && !response.drag_stopped() {
+            d.insert_temp(id, (raw, t));
+        } else {
+            d.remove_temp::<(f32, f32)>(id);
+        }
+    });
+    let reset = wants_reset(response);
     changed
+        .map(|v| snap(v, n))
+        .filter(|v| reset || (v - t).abs() >= 0.25 / n as f32)
 }
 
 /// Whether a knob gesture began this frame: a drag, a reset or a wheel turn.
@@ -182,11 +233,30 @@ pub fn knob(
     default: f32,
     bipolar: bool,
 ) -> KnobOutput {
+    stepped_knob(ui, value, min, max, default, bipolar, None)
+}
+
+/// A [`knob`] whose value lands only on `steps` equal steps across its range
+/// (for example a whole-number parameter); `None` is continuous.
+pub fn stepped_knob(
+    ui: &mut Ui,
+    value: f32,
+    min: f32,
+    max: f32,
+    default: f32,
+    bipolar: bool,
+    steps: Option<u32>,
+) -> KnobOutput {
     let size = 22.0;
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), Sense::click_and_drag());
     let range = (max - min).max(1e-6);
     let to_t = |v: f32| ((v - min) / range).clamp(0.0, 1.0);
-    let changed = knob_input(ui, &response, to_t(value), to_t(default)).map(|t| min + t * range);
+    let from_t = |t: f32| match steps.filter(|n| *n > 0) {
+        // Whole steps, so integer ranges give exact whole numbers.
+        Some(n) => min + (t * n as f32).round() * (range / n as f32),
+        None => min + t * range,
+    };
+    let changed = knob_input(ui, &response, to_t(value), to_t(default), steps).map(from_t);
     let shown = changed.unwrap_or(value);
     let painter = ui.painter_at(rect.expand(2.0));
     let center = rect.center();
@@ -254,9 +324,23 @@ pub fn labeled_knob(
     bipolar: bool,
     value: &str,
 ) -> KnobOutput {
+    stepped_labeled_knob(ui, label, t, default, bipolar, value, None)
+}
+
+/// A [`labeled_knob`] that lands only on `steps` equal steps across its
+/// travel (for example a whole-number parameter); `None` is continuous.
+pub fn stepped_labeled_knob(
+    ui: &mut Ui,
+    label: &str,
+    t: f32,
+    default: f32,
+    bipolar: bool,
+    value: &str,
+    steps: Option<u32>,
+) -> KnobOutput {
     let size = vec2(52.0, 60.0);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
-    let changed = knob_input(ui, &response, t, default);
+    let changed = knob_input(ui, &response, t, default, steps);
     let shown = changed.unwrap_or(t);
     let painter = ui.painter_at(rect);
     let center = pos2(rect.center().x, rect.top() + 22.0);
@@ -803,6 +887,102 @@ mod tests {
             seen.push(value);
         }
         seen
+    }
+
+    /// Frames that press at `at` and then move the pointer `dy` points
+    /// vertically per frame, `n` times, without letting go.
+    fn slow_drag(at: Pos2, dy: f32, n: usize) -> Vec<Vec<egui::Event>> {
+        let mut frames = drag(at, at, PointerButton::Primary);
+        frames.truncate(2);
+        for i in 1..=n {
+            frames.push(vec![egui::Event::PointerMoved(
+                at + vec2(0.0, dy * i as f32),
+            )]);
+        }
+        frames
+    }
+
+    /// Like [`drag_knob`] for a knob over `min..=max` with whole-number
+    /// steps; `outside` may change the value before a frame, as automation
+    /// would.
+    fn drag_stepped(
+        start: f32,
+        max: f32,
+        frames: Vec<Vec<egui::Event>>,
+        mut outside: impl FnMut(usize, &mut f32),
+    ) -> Vec<f32> {
+        let ctx = egui::Context::default();
+        let mut value = start;
+        let mut seen = Vec::new();
+        for (i, events) in frames.into_iter().enumerate() {
+            outside(i, &mut value);
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, vec2(400.0, 400.0))),
+                time: Some(i as f64 / 60.0),
+                events,
+                ..Default::default()
+            };
+            ctx.run_ui(input, |ui| {
+                let steps = Some(max as u32);
+                if let Some(v) = stepped_knob(ui, value, 0.0, max, 0.0, false, steps).changed {
+                    value = v;
+                }
+            })
+            .textures_delta
+            .clear();
+            seen.push(value);
+        }
+        seen
+    }
+
+    #[test]
+    fn slow_drags_add_up_on_a_stepped_knob() {
+        let at = pos2(10.0, 12.0);
+        // Two values: half the knob's travel (75 points) reaches the other
+        // one, even moving 3 points a frame.
+        let seen = drag_stepped(0.0, 1.0, slow_drag(at, -3.0, 30), |_, _| {});
+        let flipped = seen.iter().position(|v| *v == 1.0);
+        assert!(flipped.is_some_and(|i| (24..=30).contains(&i)), "{seen:?}");
+        // And back down the same way.
+        let seen = drag_stepped(1.0, 1.0, slow_drag(at, 3.0, 30), |_, _| {});
+        assert_eq!(*seen.last().unwrap(), 0.0, "{seen:?}");
+        // Five steps: one every 30 points, each landing on a whole number.
+        let seen = drag_stepped(0.0, 5.0, slow_drag(at, -2.0, 75), |_, _| {});
+        assert_eq!(*seen.last().unwrap(), 5.0, "{seen:?}");
+        let mut levels = seen.clone();
+        levels.dedup();
+        assert_eq!(levels, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
+    }
+
+    #[test]
+    fn a_stepped_knob_starts_over_when_the_value_changes_elsewhere() {
+        let at = pos2(10.0, 12.0);
+        // Halfway to the next step, automation moves the value to 3; the
+        // drag carries on from there instead of jumping back toward 1.
+        let seen = drag_stepped(0.0, 5.0, slow_drag(at, -2.0, 12), |i, value| {
+            if i == 8 {
+                *value = 3.0;
+            }
+        });
+        assert!(seen[8..].iter().all(|v| *v >= 3.0), "{seen:?}");
+    }
+
+    #[test]
+    fn wheel_turns_add_up_on_a_stepped_knob() {
+        let at = pos2(10.0, 12.0);
+        let mut frames = vec![vec![egui::Event::PointerMoved(at)]];
+        // 40 points a turn; 300 points cross half of a two-value knob.
+        for _ in 0..10 {
+            frames.push(vec![egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: vec2(0.0, 40.0),
+                phase: egui::TouchPhase::Move,
+                modifiers: egui::Modifiers::NONE,
+            }]);
+            frames.extend((0..30).map(|_| vec![]));
+        }
+        let seen = drag_stepped(0.0, 1.0, frames, |_, _| {});
+        assert_eq!(*seen.last().unwrap(), 1.0, "{seen:?}");
     }
 
     #[test]

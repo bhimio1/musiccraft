@@ -11,6 +11,13 @@ everywhere.
   Every knob, tiny or medium, crosses its whole range in 150 points of drag
   (600 with Shift) and 600 points of wheel, and lightens while hovered.
 - **Scroll** over a knob or fader nudges it.
+- **Stepped knobs.** A knob for a whole-number value (a switch, a mode, a
+  count) lands only on whole numbers, each an equal share of the travel.
+  Drag and wheel movement smaller than a step adds up until it reaches the
+  next one, so a slow drag moves a stepped knob as smoothly as a fast one:
+  a two-value knob flips after half its travel (75 points of drag). If the
+  value changes from elsewhere mid-gesture (automation, a preset), the
+  gesture carries on from the new value.
 - **Middle-click** resets the control to its default: a fader to unity
   (0 dB), a channel volume to the default channel level, a pan to centre, an
   effect or synth parameter to its table default, a mixer send to unity.
@@ -91,5 +98,6 @@ channel name still selects it and opens its settings, which stay open.
 
 - Own design. Middle-click and double-click to reset are common conventions
   in audio software; the rule that only the left button drags is our own.
+- Stepped knobs: own design (issue #49).
 - Value text formats: the interface style guide, `docs/spec/style/controls.md`
   ("Value formats"); own design.

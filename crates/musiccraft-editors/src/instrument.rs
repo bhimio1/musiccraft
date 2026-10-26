@@ -176,13 +176,14 @@ impl<'a> InstrumentEditor<'a> {
             return;
         };
         let value = self.get(index);
-        let out = widgets::labeled_knob(
+        let out = widgets::stepped_labeled_knob(
             ui,
             label,
             spec.to_unit(value),
             spec.to_unit(spec.default),
             spec.min < 0.0 && spec.max > 0.0,
             &spec.format(value),
+            spec.steps(),
         );
         (self.menu)(&out.response, spec.name);
         if out.started {
