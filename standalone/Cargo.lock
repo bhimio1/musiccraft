@@ -1273,7 +1273,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-antiserum"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "musiccraft-dsp",
  "musiccraft-params",
@@ -1281,7 +1281,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-antiserum-presets"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "musiccraft-antiserum",
  "musiccraft-dsp",
@@ -1294,14 +1294,14 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-dsp"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "musiccraft-params",
 ]
 
 [[package]]
 name = "musiccraft-editors"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "egui",
  "musiccraft-antiserum",
@@ -1317,14 +1317,14 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-file-dialog"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "rfd",
 ]
 
 [[package]]
 name = "musiccraft-formula"
-version = "0.4.2"
+version = "0.4.3"
 
 [[package]]
 name = "musiccraft-fx-standalone"
@@ -1336,7 +1336,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-instruments"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "musiccraft-dsp",
  "musiccraft-params",
@@ -1344,14 +1344,14 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-params"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "musiccraft-patch"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "serde",
  "serde_json",
@@ -1359,11 +1359,11 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-paths"
-version = "0.4.2"
+version = "0.4.3"
 
 [[package]]
 name = "musiccraft-plugin-editor"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "baseview 0.1.0 (git+https://github.com/RustAudio/baseview.git?rev=9a0b42c09d712777b2edb4c5e0cb6baf21e988f0)",
  "egui",
@@ -1376,7 +1376,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-plugin-export"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "egui",
  "musiccraft-antiserum",
@@ -1396,7 +1396,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-samples"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "hound",
  "mp3lame-encoder",
@@ -1407,7 +1407,7 @@ dependencies = [
 
 [[package]]
 name = "musiccraft-wavetables"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "hound",
  "musiccraft-dsp",
