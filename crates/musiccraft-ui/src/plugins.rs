@@ -65,6 +65,8 @@ pub struct LivePluginView {
 pub struct Plugins {
     /// Whether this build can host plugins at all.
     pub available: bool,
+    /// The plugin folders were not scanned at start and no rescan ran yet.
+    pub unscanned: bool,
     /// Installed plugins.
     pub catalog: Vec<PluginEntry>,
     /// Running instances the UI asked about (the selected channel and effect).
@@ -146,7 +148,9 @@ pub(crate) fn add_menu(
             }
         });
     if !any {
-        let text = if plugins.available {
+        let text = if plugins.unscanned {
+            "Plugins not scanned yet"
+        } else if plugins.available {
             "No CLAP plugins found"
         } else {
             "Plugin hosting is not available"

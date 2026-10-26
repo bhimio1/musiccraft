@@ -298,6 +298,7 @@ impl App {
             None => Keymap::default_keymap(),
         };
         let settings = settings::load();
+        let scan_plugins = settings.scan_plugins_on_start;
         // Sample paths from Windows projects translate with these folders.
         musiccraft_paths::configure(settings.path_config());
         ctx.set_zoom_factor(settings.scale());
@@ -402,7 +403,7 @@ impl App {
             input: None,
             take: None,
             takes: 0,
-            plugins: plugins::PluginGlue::new(musiccraft_cli::plugin_host()),
+            plugins: plugins::PluginGlue::new(musiccraft_cli::plugin_host(), scan_plugins),
             saved_json,
             pending: None,
             closing: false,
@@ -428,8 +429,10 @@ impl App {
         info.inputs = musiccraft_audio::input_device_names();
         info.midi_ports = midi::port_names();
         info.midi_out_ports = midi_out::port_names();
+        // The glue's catalog, so that refreshing never starts a scan.
+        info.plugin_count = self.plugins.count();
+        info.plugins_unscanned = self.plugins.unscanned();
         if let Some(host) = musiccraft_cli::plugin_host() {
-            info.plugin_count = host.catalog().len();
             info.plugin_errors = host.scan_errors();
         }
     }

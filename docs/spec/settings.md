@@ -30,6 +30,12 @@
 - **Folders**: browser folders (add, remove) and extra plugin folders (add,
   remove), searched in addition to the standard CLAP locations; a rescan
   button, the number of plugins found and any files that failed to load.
+  **Scan plugins on startup** (on by default): when off, the app does not
+  search the plugin folders at start, so it opens faster and a broken plugin
+  cannot stall it; the plugin lists say the plugins are not scanned yet until
+  the next rescan (the button here, or the browser's and the add-plugin
+  menus'). A project that uses plugins still finds them when they start,
+  which scans then. The setting takes effect at the next start.
   Below them, **samples from Windows projects**: the FL Studio factory and
   user data folders (empty means detected) and drive mappings (a Windows
   prefix → a folder; add, remove). See `sample-paths.md`; the browser folders

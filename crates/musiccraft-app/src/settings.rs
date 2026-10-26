@@ -67,6 +67,7 @@ mod tests {
         let old: Settings = serde_json::from_str(r#"{"ui_scale": 1.5}"#).unwrap();
         assert!((old.scale() - 1.5).abs() < 1e-6);
         assert!(old.autosave);
+        assert!(old.scan_plugins_on_start, "scanning stays on for old files");
         assert_eq!(old.midi_input, MidiInput::Auto);
     }
 }
