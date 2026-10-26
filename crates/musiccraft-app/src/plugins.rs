@@ -29,6 +29,9 @@ const PERSISTING: [&str; 6] = [
 pub struct PluginGlue {
     host: Option<PluginHost>,
     catalog: Vec<PluginEntry>,
+    /// Whether the catalog has been read from the host since start; reading
+    /// it scans the plugin folders.
+    listed: bool,
     /// Instances whose state changed, and when the first change was seen.
     dirty: BTreeSet<u32>,
     dirty_since: Option<Instant>,
@@ -64,18 +67,35 @@ fn format_of(path: &std::path::Path) -> &'static str {
 }
 
 impl PluginGlue {
-    pub fn new(host: Option<PluginHost>) -> Self {
+    /// Glue for `host`; with `scan` false the plugin folders are not scanned
+    /// until the first rescan (or until a project needs a plugin).
+    pub fn new(host: Option<PluginHost>, scan: bool) -> Self {
         let mut glue = Self {
             host,
             catalog: Vec::new(),
+            listed: false,
             dirty: BTreeSet::new(),
             dirty_since: None,
         };
-        glue.refresh_catalog();
+        if scan {
+            glue.refresh_catalog();
+        }
         glue
     }
 
+    /// Plugins listed in the catalog.
+    pub fn count(&self) -> usize {
+        self.catalog.len()
+    }
+
+    /// Whether the plugin folders were skipped at start and no rescan has
+    /// listed them since.
+    pub fn unscanned(&self) -> bool {
+        self.host.is_some() && !self.listed
+    }
+
     fn refresh_catalog(&mut self) {
+        self.listed = true;
         self.catalog = self
             .host
             .as_ref()
@@ -111,6 +131,7 @@ impl PluginGlue {
     pub fn view(&self, bridge: Option<&mut Bridge>, project: &Project, ui: &UiState) -> Plugins {
         let mut plugins = Plugins {
             available: self.host.is_some(),
+            unscanned: self.unscanned(),
             catalog: self.catalog.clone(),
             ..Plugins::default()
         };
@@ -292,5 +313,62 @@ fn store_states(bridge: &mut Bridge, session: &mut Session, instances: &[u32]) {
         let mut args = slot_args(slot);
         args.push(encoded);
         let _ = session.run(&Invocation::new(command(slot, "set_plugin_state"), args));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use musiccraft_render::{LivePlugin, PluginFactory, PluginInfo, PluginRequest};
+
+    use super::*;
+
+    /// A host that counts how often its plugin folders are scanned.
+    #[derive(Default)]
+    struct Counting {
+        scans: AtomicUsize,
+    }
+
+    impl PluginFactory for Counting {
+        fn catalog(&self) -> Vec<PluginInfo> {
+            self.scans.fetch_add(1, Ordering::SeqCst);
+            vec![PluginInfo {
+                id: "org.example.keys".into(),
+                name: "Keys".into(),
+                vendor: String::new(),
+                version: String::new(),
+                kind: PluginKind::Instrument,
+                path: PathBuf::from("keys.clap"),
+            }]
+        }
+
+        fn rescan(&self) {}
+
+        fn instantiate(&self, _request: &PluginRequest<'_>) -> Result<LivePlugin, String> {
+            Err("not in tests".into())
+        }
+    }
+
+    #[test]
+    fn startup_scan_can_be_skipped_until_a_rescan() {
+        let counting = Arc::new(Counting::default());
+        let host: PluginHost = counting.clone();
+        let mut glue = PluginGlue::new(Some(Arc::clone(&host)), false);
+        assert_eq!(counting.scans.load(Ordering::SeqCst), 0, "no scan at start");
+        assert!(glue.unscanned());
+        assert_eq!(glue.count(), 0);
+        assert_eq!(glue.rescan(None), "found 1 plugins");
+        assert!(!glue.unscanned());
+
+        let glue = PluginGlue::new(Some(host), true);
+        assert!(!glue.unscanned());
+        assert_eq!(glue.count(), 1);
+        assert!(
+            !PluginGlue::new(None, false).unscanned(),
+            "no host, nothing to scan"
+        );
     }
 }

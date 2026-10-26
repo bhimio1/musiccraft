@@ -1023,6 +1023,7 @@ fn plugin_channels_show_parameters_and_open_their_window() {
             editor_open: false,
         }],
         running: vec![instance],
+        unscanned: false,
     };
     h.state.windows.channel_settings = true;
     h.settle();

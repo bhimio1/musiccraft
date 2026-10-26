@@ -47,6 +47,9 @@
 - **Export** renders plugins offline with fresh instances restored from the
   project, so exports sound like playback.
 - `plugin.list` lists the scanned plugins (id, name, kind, file).
+- The app scans the plugin folders at start unless **Scan plugins on startup**
+  is off in Settings → Folders (`settings.md`); then the catalog stays empty
+  until a rescan.
 
 ## Real-time rules
 

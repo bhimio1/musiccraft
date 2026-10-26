@@ -54,6 +54,9 @@ pub struct Settings {
     pub browser_folders: Vec<PathBuf>,
     /// Extra folders searched for CLAP plugins.
     pub plugin_folders: Vec<PathBuf>,
+    /// Scan the plugin folders when the app starts; when off, the plugin
+    /// list stays empty until a rescan.
+    pub scan_plugins_on_start: bool,
     /// FL Studio's factory data folder, for `%FLStudioFactoryData%` paths.
     pub fl_factory: Option<PathBuf>,
     /// FL Studio's user data folder, for `%FLStudioUserData%` paths.
@@ -99,6 +102,7 @@ impl Default for Settings {
             start_empty: false,
             browser_folders: crate::browser::default_folders(),
             plugin_folders: Vec::new(),
+            scan_plugins_on_start: true,
             fl_factory: None,
             fl_user: None,
             drive_map: Vec::new(),
@@ -159,6 +163,8 @@ pub struct SettingsInfo {
     pub audio_note: Option<String>,
     /// Installed plugins found.
     pub plugin_count: usize,
+    /// The plugin folders were not scanned at start and no rescan ran yet.
+    pub plugins_unscanned: bool,
     /// Plugin files that failed to load.
     pub plugin_errors: Vec<String>,
 }
@@ -628,7 +634,17 @@ fn folders(ui: &mut egui::Ui, state: &mut UiState, frame: &Frame<'_>, actions: &
             actions.push(Action::RescanPlugins);
         }
     });
-    ui.label(format!("{} plugins found", info.plugin_count));
+    let mut scan = settings.scan_plugins_on_start;
+    if crate::widgets::led_switch(ui, &mut scan, "Scan plugins on startup").changed() {
+        let mut next = settings.clone();
+        next.scan_plugins_on_start = scan;
+        changed(actions, next);
+    }
+    if info.plugins_unscanned {
+        ui.label("Plugins not scanned yet; rescan to list them");
+    } else {
+        ui.label(format!("{} plugins found", info.plugin_count));
+    }
     ui.add_space(10.0);
     foreign_paths(ui, state, settings, actions);
     if !info.plugin_errors.is_empty() {
