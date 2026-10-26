@@ -88,6 +88,15 @@ impl ParamSpec {
         if self.integer { value.round() } else { value }
     }
 
+    /// How many whole-number steps an integer parameter's knob crosses (its
+    /// range); `None` for a continuous parameter. Integer parameters map
+    /// linearly onto a knob, so each step is the same share of its travel.
+    #[must_use]
+    pub fn steps(&self) -> Option<u32> {
+        let range = (self.max - self.min).round();
+        (self.integer && range >= 1.0).then_some(range as u32)
+    }
+
     /// Whether `value` is finite and inside the range.
     #[must_use]
     pub fn accepts(&self, value: f32) -> bool {
@@ -1568,6 +1577,14 @@ impl fmt::Display for EffectKind {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn integer_parameters_count_their_knob_steps() {
+        assert_eq!(int_spec("on", 0.0, 1.0, 0.0).steps(), Some(1));
+        assert_eq!(int_spec("voices", 1.0, 16.0, 1.0).steps(), Some(15));
+        assert_eq!(spec("mix", 0.0, 1.0, 1.0, "%").steps(), None);
+        assert_eq!(int_spec("fixed", 3.0, 3.0, 3.0).steps(), None);
+    }
 
     #[test]
     fn tables_fit_their_arrays_and_defaults_are_in_range() {

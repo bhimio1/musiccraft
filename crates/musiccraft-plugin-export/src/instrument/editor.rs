@@ -188,13 +188,14 @@ fn own_knob(ui: &mut Ui, slot: &Slot) -> Option<Option<f32>> {
     } else {
         "Bend"
     };
-    let out = widgets::labeled_knob(
+    let out = widgets::stepped_labeled_knob(
         ui,
         label,
         spec.to_unit(value),
         spec.to_unit(spec.default),
         false,
         &spec.format(value),
+        spec.steps(),
     );
     let hint = if spec.name == "swing" {
         "How far off-beat sixteenths move later (the app's project swing)"
